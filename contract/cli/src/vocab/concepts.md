@@ -1272,7 +1272,9 @@ The buttons of a route's `header` are its bar's items: those before the heading 
 after it trail. iOS 26 puts adjacent ungrouped buttons on one shared glass capsule.
 `buttonStyle="glass"` on a bar button gives it a capsule of its own (`sharesBackground =
 false`), and a `row role="group"` around some keeps those on one capsule, set apart from the
-next group. Leave their size, colour and padding unsaid.
+next group. Leave their size, colour and padding unsaid. A button whose face is drawn as
+written (a status dot beside its label, or a label in a `font-family` of yours) keeps its
+left and right padding as room inside its capsule.
 
 ```contract
 routes nav

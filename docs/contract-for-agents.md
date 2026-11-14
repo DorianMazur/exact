@@ -3419,7 +3419,8 @@ main navigationKey=`${top(nav).id}` navigationBack="close" navigate=follow displ
   label, or a label in a `font-family` of yours (which makes the button a custom
   one), is drawn as written, in its colours, as the
   item's image inside the bar's capsule (a "● Clock" chip in 12-point monospace).
-  A filled box holding a text or symbol (an avatar, a badge) is drawn without the
+  The button's left and right padding is room the face keeps inside that capsule
+  (`padding="0px 7px"`). A filled box holding a text or symbol (an avatar, a badge) is drawn without the
   capsule. Leave the font unsaid for an ordinary Edit or Done.
 - A readout nothing presses (a "● Clock" or "Saved" beside the title) is
   `role="status"` in the header, beside the buttons. (A `button disabled=true` is a
