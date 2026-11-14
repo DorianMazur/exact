@@ -83,6 +83,33 @@ final class GesturePrecedenceIOSTests: XCTestCase {
         XCTAssertNil(node.gestureRecognizers?.first { $0 is PointerRecognizer })
     }
 
+    /// The touch an observer holds can end without its end reaching it (a
+    /// pull-down's menu takes the tap that opened it). The next touch is
+    /// observed anyway: the ended one is lifted first, as its end would have
+    /// lifted it, and the observer fails at the next lift. Left possible,
+    /// it kept UIKit from resetting the touch's other recognizers, and a
+    /// sheet's scroll view never began another pan.
+    func testAnObserverWhoseHeldTouchEndedUnseenObservesTheNextTouch() throws {
+        let p = host([
+            ["op": "create", "id": 1, "kind": "button", "handlers": ["press", "pointerdown", "pointerup"]],
+            ["op": "roots", "ids": [1]],
+            ["op": "frame", "id": 1, "x": 0.0, "y": 0.0, "w": 200.0, "h": 100.0]
+        ])
+        var log: [String] = []
+        p.onPointer = { id, kind, _ in log.append("\(kind == .down ? "down" : kind == .up ? "up" : "move") \(id)") }
+        let node = try XCTUnwrap(p.views[1])
+        let g = try XCTUnwrap(node.gestureRecognizers?.compactMap { $0 as? PointerRecognizer }.first)
+        let opened = LiftedTouch()
+        g.touchesBegan([opened], with: UIEvent())
+        XCTAssertEqual(log, ["down 1"])
+        opened.lifted = true
+        let next = UITouch()
+        g.touchesBegan([next], with: UIEvent())
+        XCTAssertEqual(log, ["down 1", "up 1", "down 1"], "the ended touch lifted, the next one observed")
+        g.touchesEnded([next], with: UIEvent())
+        XCTAssertEqual(log, ["down 1", "up 1", "down 1", "up 1"])
+    }
+
     /// A touch's offsets are from the content box layout sent: a padding the
     /// style rows cannot resolve (5% of a 400-point containing block) is 20
     /// points in, as the canvas or paragraph inside it is drawn. A made touch
@@ -470,5 +497,10 @@ final class GesturePrecedenceIOSTests: XCTestCase {
         UIView().addGestureRecognizer(stray)
         XCTAssertFalse(row.gestureRecognizer(swipe, shouldRequireFailureOf: stray), "nor another edge pan")
     }
+}
+/// A touch whose phase a test ends: UIKit's end of it never reached the recognizer.
+private final class LiftedTouch: UITouch {
+    var lifted = false
+    override var phase: UITouch.Phase { lifted ? .ended : .began }
 }
 #endif
