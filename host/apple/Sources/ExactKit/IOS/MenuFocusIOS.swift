@@ -156,37 +156,41 @@ final class MenuButton: InvokerButton {
     var toggled: ((Bool) -> Void)?
     private(set) var isMenuOpen = false
     private var menuConfiguration: UIContextMenuConfiguration?
-    /// The invoker's fill as a sublayer while UIKit previews the invoker.
-    private var lentFill: CALayer?
+    /// The invoker whose fill this menu lent (`NodeExtras.lentFill`).
+    private weak var lentFrom: NodeView?
     func dismissMenu() {
         guard isMenuOpen else { return }
         isMenuOpen = false
         toggled?(false)
         contextMenuInteraction?.dismissMenu()
     }
-    /// The invoker's own layer fill (not a glass material's) moved to a
-    /// sublayer of its shape, under its children, until `returnFill`.
+    /// The invoker's own layer fill (not a glass material's) lent to a
+    /// sublayer of its shape, under its children, until `returnFill`. The
+    /// box paints it there meanwhile (`applyBoxLayer`), so a style change or
+    /// a new size while the menu shows reaches the stand-in.
     private func lendFill() {
-        guard lentFill == nil, let node = invoker, node.glassBody == nil, let fill = node.layer.backgroundColor, fill.alpha > 0 else { return }
+        guard lentFrom == nil, let node = invoker, node.glassBody == nil, node.extras?.lentFill == nil,
+              let fill = node.layer.backgroundColor, fill.alpha > 0 else { return }
         let lent = CAShapeLayer()
-        lent.frame = node.layer.bounds
-        lent.path = (LiftTarget.rounded(node) ?? UIBezierPath(rect: node.bounds)).cgPath
-        lent.fillColor = fill
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         node.layer.insertSublayer(lent, at: 0)
-        node.layer.backgroundColor = nil
+        node.more.lentFill = lent
+        node.applyBoxLayer()
         CATransaction.commit()
-        lentFill = lent
+        lentFrom = node
     }
-    /// The fill back on the invoker's layer, unless the page set a new one meanwhile.
+    /// The fill back on the invoker's layer as the box paints it now: a
+    /// background the page changed or cleared meanwhile stays as it is.
     private func returnFill() {
-        guard let lent = lentFill as? CAShapeLayer else { return }
-        lentFill = nil
+        guard let node = lentFrom else { return }
+        lentFrom = nil
+        guard let lent = node.extras?.lentFill else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        if let node = invoker, node.layer.backgroundColor == nil { node.layer.backgroundColor = lent.fillColor }
+        node.more.lentFill = nil
         lent.removeFromSuperlayer()
+        node.applyBoxLayer()
         CATransaction.commit()
     }
     // An invoker hidden or out of the window (unmounted while its menu

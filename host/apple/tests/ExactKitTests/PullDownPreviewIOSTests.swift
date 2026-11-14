@@ -19,7 +19,7 @@ final class PullDownPreviewIOSTests: XCTestCase {
         p.viewport.frame = window.bounds
         window.addSubview(p.viewport)
         window.makeKeyAndVisible()
-        // A glass pill, or one whose fill is its own layer's (set by the test).
+        // A glass pill, or a page-drawn one the test fills.
         let props: [String: Any] = glass ? ["popovertarget": "m", "backgroundMaterial": "glass"] : ["popovertarget": "m"]
         // A screen (1): a glass pill (2) that opens its menu (3) of one row (4).
         p.apply(wireBatch([
@@ -81,29 +81,48 @@ final class PullDownPreviewIOSTests: XCTestCase {
         XCTAssertTrue(LiftTarget.pullDownContainer(of: invoker) === strip, "whole inside the strip: its parent")
     }
 
-    func testAFilledInvokerLendsItsFillToASublayerWhileItsMenuHasIt() throws {
+    /// A page-drawn pill (`appearance: none`) filled 8 % white, its menu
+    /// opened and then ended; `restyle` runs while the menu has it.
+    private func lendAndEnd(_ restyle: (Presenter, NodeView) -> Void) throws -> (invoker: NodeView, lent: CAShapeLayer, during: CGColor?) {
         let p = presenter(glass: false)
         defer { p.menus.reset() }
         let invoker = try XCTUnwrap(p.views[2])
-        let fill = UIColor(white: 1, alpha: 0.08).cgColor
-        invoker.layer.backgroundColor = fill
+        p.apply(wireBatch([["op": "style", "id": 2, "style": ["appearance": "none", "border_radius": 22, "background_color": [255, 255, 255, 20]]]]))
+        invoker.layer.displayIfNeeded()
+        XCTAssertEqual(invoker.layer.backgroundColor?.alpha ?? 0, 20.0 / 255, accuracy: 0.01, "the authored fill is the layer's")
         let button = try XCTUnwrap(invoker.subviews.compactMap { $0 as? MenuButton }.first)
         let interaction = try XCTUnwrap(button.contextMenuInteraction)
         let configuration = UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in button.menu }
         let preview = try XCTUnwrap(button.contextMenuInteraction(interaction, previewForHighlightingMenuWithConfiguration: configuration))
         XCTAssertTrue(preview.view === invoker, "the invoker itself, which UIKit hides and morphs")
-        XCTAssertNil(invoker.layer.backgroundColor, "not on the layer UIKit's copy leaves out")
+        XCTAssertNil(invoker.layer.backgroundColor, "not on the layer UIKit's stand-in leaves out")
         let lent = try XCTUnwrap(invoker.layer.sublayers?.first as? CAShapeLayer)
-        XCTAssertEqual(lent.fillColor, fill)
-        let box = try XCTUnwrap(lent.path?.boundingBox)
-        XCTAssertEqual(box.minX, invoker.bounds.minX, accuracy: 0.001)
-        XCTAssertEqual(box.width, invoker.bounds.width, accuracy: 0.001)
-        XCTAssertEqual(box.height, invoker.bounds.height, accuracy: 0.001)
-        // The menu shows and ends: the fill goes back to the invoker's layer.
+        XCTAssertEqual(lent.fillColor?.alpha ?? 0, 20.0 / 255, accuracy: 0.01)
         button.contextMenuInteraction(interaction, willDisplayMenuFor: configuration, animator: nil)
+        restyle(p, invoker)
+        invoker.layer.setNeedsDisplay()
+        invoker.layer.displayIfNeeded()
+        XCTAssertNil(invoker.layer.backgroundColor, "a repaint while the menu has it paints the lent fill")
+        let during = lent.fillColor
         button.contextMenuInteraction(interaction, willEndFor: configuration, animator: nil)
-        XCTAssertEqual(invoker.layer.backgroundColor, fill)
         XCTAssertFalse(invoker.layer.sublayers?.contains(lent) ?? false)
+        return (invoker, lent, during)
+    }
+
+    func testAFilledInvokersLentFillFollowsAStyleChangeAndGoesBack() throws {
+        let (invoker, _, during) = try lendAndEnd { p, _ in
+            p.apply(wireBatch([["op": "style", "id": 2, "style": ["appearance": "none", "border_radius": 22, "background_color": [255, 0, 0, 255]]]]))
+        }
+        XCTAssertEqual(during?.components?.first ?? 0, 1, accuracy: 0.01, "the stand-in shows the new fill")
+        XCTAssertEqual(invoker.layer.backgroundColor?.components?.first ?? 0, 1, accuracy: 0.01, "and the layer has it after the menu")
+    }
+
+    func testABackgroundClearedWhileTheMenuShowsStaysCleared() throws {
+        let (invoker, _, during) = try lendAndEnd { p, _ in
+            p.apply(wireBatch([["op": "style", "id": 2, "style": ["appearance": "none", "border_radius": 22]]]))
+        }
+        XCTAssertNil(during, "the stand-in shows no fill")
+        XCTAssertNil(invoker.layer.backgroundColor, "the menu's end restores no background the page cleared")
     }
 
     func testAnInvokerOutOfTheWindowHasNoPreview() throws {

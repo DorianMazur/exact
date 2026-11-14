@@ -380,7 +380,14 @@ extension NodeView {
         let bg = onLayer && !away && !cssVisibilityHidden && (vibrancyView == nil || isParagraph) ? fill : nil
         applyCornerFill(shapedRadii ? bg : nil)
         let layerFill = shapedRadii ? nil : bg
-        if layer.backgroundColor != layerFill { layer.backgroundColor = layerFill }
+        if let lent = extras?.lentFill {
+            // Lent to a menu's stand-in: the current fill and outline go on
+            // the sublayer it draws, the layer's own stays clear.
+            if layer.backgroundColor != nil { layer.backgroundColor = nil }
+            lent.frame = layer.bounds
+            lent.path = (LiftTarget.rounded(self) ?? UIBezierPath(rect: bounds)).cgPath
+            if lent.fillColor != layerFill { lent.fillColor = layerFill }
+        } else if layer.backgroundColor != layerFill { layer.backgroundColor = layerFill }
         // A flight interpolates the radius itself (LLP 1013.000 D4).
         if flightLook == nil, layer.cornerRadius != cornerRadius { layer.cornerRadius = cornerRadius }
         if let v = vibrancyView, !isParagraph {
