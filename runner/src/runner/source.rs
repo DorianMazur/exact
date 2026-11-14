@@ -116,6 +116,27 @@ impl Native {
         })
     }
 
+    /// The handler for a module's (package's) calls: the host's app module,
+    /// where packages live, before the source's own. A data module's native
+    /// module (a Rust library in the slot, LLP 1154 D3) answers its own
+    /// `native.later` through [`Native::handler`], so it cannot shadow every
+    /// package when the app links both.
+    pub fn extension_handler(&self) -> Option<NativeHandler> {
+        let hosted = self
+            .0
+            .hosted
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        hosted.or_else(|| {
+            self.0
+                .handler
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone()
+        })
+    }
+
     /// The session's app module, which the host owns and installs (LLP
     /// 1067.000 Q6): it outlives the source's activations, so unloading the
     /// source leaves it, and it answers when the source has no handler of
@@ -1070,6 +1091,46 @@ impl std::fmt::Display for DataError {
 
 #[cfg(test)]
 mod target_tests {
+    #[test]
+    fn a_module_call_reaches_the_host_module_beside_a_source_native_module() {
+        let slot = super::Native::default();
+        let tag = |t: &'static str| -> super::NativeHandler {
+            std::sync::Arc::new(move |_body, reply: crate::Reply| {
+                reply.send(crate::Outcome::Response(crate::Response {
+                    status: 200,
+                    headers: Vec::new(),
+                    body: t.as_bytes().to_vec(),
+                }))
+            })
+        };
+        let run = |h: Option<super::NativeHandler>| {
+            let (tx, rx) = std::sync::mpsc::channel();
+            h.expect("a handler")(Vec::new(), crate::Reply::new(move |o| tx.send(o).unwrap()));
+            match rx.recv().unwrap() {
+                crate::Outcome::Response(r) => String::from_utf8(r.body).unwrap(),
+                other => panic!("{other:?}"),
+            }
+        };
+        assert!(slot.extension_handler().is_none());
+        slot.set(Some(tag("source")));
+        assert_eq!(
+            run(slot.extension_handler()),
+            "source",
+            "no host module: the source's own answers"
+        );
+        slot.host(Some(tag("host")));
+        assert_eq!(
+            run(slot.extension_handler()),
+            "host",
+            "packages live in the host's module"
+        );
+        assert_eq!(
+            run(slot.handler()),
+            "source",
+            "the source's own native.later stays its own"
+        );
+    }
+
     use super::Target;
 
     #[test]

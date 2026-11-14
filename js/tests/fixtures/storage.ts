@@ -164,6 +164,8 @@ async function work(_source:string, args:unknown[], store:Store, storage:Storage
     catch(error:any) { return {text:'refused: ' + error.message}; }
   }
   if (op === 'native-direct') return {text: String(native!.call({value}).text)}; // no bake branch
+  // A package's synchronous form beside the app's own native module (native_later.rs).
+  if (op === 'native-extension') return {text: String(native!.call({extension: 'pkg', sync: 'echo', args: {value}}).text)};
   // A number each way across the native seam, read back exactly (native_later.rs).
   if (op === 'native-number') return {text: String(native!.call({n: Number(value)}).text)};
   if (op === 'later-number') return {text: String((await native!.later({n: Number(value)})).text)};
