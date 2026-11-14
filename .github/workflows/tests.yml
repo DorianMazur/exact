@@ -1,6 +1,7 @@
 # The Cargo tests on Linux and macOS and the script tests on Linux, for pushes
-# to main and for pull requests. Nothing waits for this workflow (ci.yml is what
-# a push waits for): a hosted runner takes over an hour for these.
+# to main, and the Linux jobs for pull requests too. Nothing waits for this
+# workflow (ci.yml is what a push waits for): a hosted runner takes over an hour
+# for these.
 name: tests
 
 on:
@@ -96,8 +97,15 @@ jobs:
         run: bun test scripts
 
   macos:
+    # Only for pushes to main: the job holds a macOS runner for over two hours,
+    # and the org shares a few of them across its repositories.
+    if: ${{ github.event_name == 'push' }}
     runs-on: macos-26
     timeout-minutes: 150
+    env:
+      # The test binaries are large enough that the linker warns about their
+      # unwind tables. As on Linux, the tests do without the line tables.
+      CARGO_PROFILE_DEV_DEBUG: "0"
     steps:
       - uses: actions/checkout@v4
 
