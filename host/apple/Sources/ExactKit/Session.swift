@@ -661,6 +661,7 @@ public final class ExactSession {
     /// waited for it. Before any other batch applies, so batches apply in
     /// the owner's order (T4).
     func landFill() {
+        // Re-entry: the running loop takes every slice published meanwhile from the queue
         guard !landing else { return }
         landing = true
         // A reply the slices released (`afterFill`) may have left a deadline

@@ -207,6 +207,7 @@ export function runCaps(root = process.cwd()) {
   harnesses(root, files);
   helps(root);
   wasm(root);
+  reentry(root, files);
 
   return { problems, counted };
 }
@@ -281,6 +282,45 @@ function helps(root) {
   }
   for (const p of found) fail(p.code, p.message, p.detail);
   counted.push(`helps: each verb's flags against its script's, its rows and lengths, ${found.length} problems`);
+}
+
+/**
+ * A guard that returns while the same work runs drops the call. A call that carries data (a batch's ops), or that
+ * comes after the running pass read what it changed, is then lost until something else runs the work again: the iOS
+ * host's navigation sync lost a stack that way when the app answered a request made inside a sync. So each Swift
+ * guard that returns while a flag its file raises is set says, in a comment on it or on the two lines above that
+ * names re-entry, what a call made meanwhile loses, or keeps the call and runs it after the pass.
+ */
+// Guards written before the check, whose dropped calls are yet to be read (QUEUE.md, "Re-entrancy guards"): each
+// leaves this list as it is read, said or fixed, and none joins it.
+const REENTRY_UNREAD = new Set([
+  'host/apple/Sources/ExactKit/IOS/ArrangementIOS.swift syncingInsets',
+  'host/apple/Sources/ExactKit/Mac/PresenterMac.swift applying',
+  'host/apple/Sources/ExactKit/Mac/SidebarMac.swift syncing',
+  'host/apple/Sources/ExactMarkdown/MarkupEditor.swift styling',
+]);
+
+function reentry(root, files) {
+  const GUARD = /^\s*(?:guard\s+!\s*([A-Za-z_][\w.]*)\s+else|if\s+([A-Za-z_][\w.]*))\s*\{\s*return\b/;
+  const SAID = /re-?entr/i;
+  let guards = 0, unread = 0;
+  for (const f of files) {
+    if (!f.endsWith('.swift') || VENDORED.test(f) || !existsSync(resolve(root, f))) continue;
+    const text = readFileSync(resolve(root, f), 'utf8'), lines = text.split('\n');
+    lines.forEach((line, i) => {
+      const m = GUARD.exec(line);
+      if (!m) return;
+      const flag = (m[1] ?? m[2]).split('.').pop();
+      // A flag the file raises around work it runs and lowers as it ends: not a state the guard merely reads
+      if (!new RegExp(`\\b${flag}\\s*=\\s*true\\b`).test(text) || !new RegExp(`defer\\s*\\{[^}]*\\b${flag}\\s*=\\s*false\\b`).test(text)) return;
+      guards += 1;
+      if ([line, lines[i - 1] ?? '', lines[i - 2] ?? ''].some((l) => SAID.test(l))) return;
+      if (REENTRY_UNREAD.has(`${f} ${flag}`)) { unread += 1; return; }
+      fail('cap:reentry', `${f}:${i + 1} returns while \`${flag}\` is set, and says nothing of the call it drops.`,
+        'A call made while the work runs is lost when it carries data or comes after the pass read what it changed. Keep it and run the work again as the pass ends (the iOS host\'s `NavigationHost.sync` keeps a batch\'s children), or say on the guard, naming re-entry, why the call loses nothing.');
+    });
+  }
+  counted.push(`re-entrancy guards: ${guards} in Swift, each saying what a call during its work loses, ${unread} yet to be read`);
 }
 
 /**
