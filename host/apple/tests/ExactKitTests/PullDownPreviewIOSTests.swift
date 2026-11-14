@@ -59,7 +59,26 @@ final class PullDownPreviewIOSTests: XCTestCase {
             XCTAssertEqual(preview.parameters.backgroundColor, .clear, "\(name): nothing drawn behind the glass")
             let center = invoker.convert(CGPoint(x: invoker.bounds.midX, y: invoker.bounds.midY), to: preview.target.container)
             XCTAssertEqual(preview.target.center, center, "\(name): where the invoker is")
+            XCTAssertTrue(preview.target.container === invoker.superview, "\(name): over its parent, so it scrolls with it")
         }
+    }
+
+    /// An invoker a clipping box already cuts (half scrolled out of a strip)
+    /// is previewed over the controller's view, so the stand-in is not cut.
+    func testAPartlyClippedInvokersPreviewStandsAboveTheClip() throws {
+        let p = presenter()
+        defer { p.menus.reset() }
+        let invoker = try XCTUnwrap(p.views[2])
+        let screen = try XCTUnwrap(invoker.superview)
+        let strip = UIView(frame: CGRect(x: 100, y: 60, width: 60, height: 44))
+        strip.clipsToBounds = true
+        screen.addSubview(strip)
+        invoker.removeFromSuperview()
+        invoker.frame = CGRect(x: 0, y: 0, width: 120, height: 44)
+        strip.addSubview(invoker)
+        XCTAssertTrue(LiftTarget.pullDownContainer(of: invoker) === LiftTarget.container(of: invoker), "cut by the strip: above it")
+        strip.frame.size.width = 200
+        XCTAssertTrue(LiftTarget.pullDownContainer(of: invoker) === strip, "whole inside the strip: its parent")
     }
 
     func testAFilledInvokerLendsItsFillToASublayerWhileItsMenuHasIt() throws {
