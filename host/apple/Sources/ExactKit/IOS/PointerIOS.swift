@@ -83,6 +83,9 @@ final class PointerRecognizer: UIGestureRecognizer {
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
         super.touchesBegan(touches, with: event)
+        // A held touch that ended unseen goes first, so the new one resolves
+        // its own paragraph or listener, not the old touch's.
+        releaseEnded()
         let source = touches.first.flatMap(Self.source)
         if touch == nil, let selection, let first = touches.first {
             node = selection.paragraph(at: first.location(in: selection.surface)).flatMap { paragraph in
@@ -93,7 +96,6 @@ final class PointerRecognizer: UIGestureRecognizer {
                     .first { $0 !== owner && $0.isDescendant(of: owner) && $0.wantsPointer && !$0.disabled }
             }
         }
-        releaseEnded()
         if touch == nil, let relay { node = relay.listener(source) { $0.wantsPointer } }
         // A contact going down ends a live press's handoff before its `pointerdown` runs.
         node?.presenter?.supersedePress()
