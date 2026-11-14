@@ -14,7 +14,7 @@ on:
 # tip is always tested and runs do not pile up. A pull request's newer push
 # replaces the run of the one before it.
 concurrency:
-  group: tests-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
