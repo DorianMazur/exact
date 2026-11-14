@@ -1,7 +1,6 @@
 # The Cargo tests on Linux and macOS and the script tests on Linux, for pushes
-# to main, and the Linux jobs for pull requests too. Nothing waits for this
-# workflow (ci.yml is what a push waits for): a hosted runner takes over an hour
-# for these.
+# to main and for pull requests. Nothing waits for this workflow (ci.yml is what
+# a push waits for): a hosted runner takes over an hour for these.
 name: tests
 
 on:
@@ -97,9 +96,7 @@ jobs:
         run: bun test scripts
 
   macos:
-    # Only for pushes to main: the job holds a macOS runner for over two hours.
     # A Blacksmith runner, as in ci.yml.
-    if: ${{ github.event_name == 'push' }}
     runs-on: blacksmith-6vcpu-macos-26
     timeout-minutes: 150
     env:
