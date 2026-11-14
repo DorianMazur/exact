@@ -17,14 +17,16 @@ extension NavigationHost {
 
     /// `stack` as UIKit is to show it in `nav`: less a results route drawn in its field's route's controller.
     /// Directly above that route, results already drawn there stay; results arriving while that route is alone in
-    /// `nav` (a stack's root on top) are drawn there; anywhere else, and wherever `inPlace` is false (an expanded
-    /// split, whose detail they are), they are UIKit's to push.
-    func placingResults(_ stack: [RouteController], on nav: UINavigationController?, inPlace: Bool) -> [RouteController] {
+    /// `nav` (a stack's root on top) are drawn there, as are results over a `collapsed` split's list however they
+    /// came (a fold that collapsed the split with them as its detail); anywhere else, and wherever `inPlace` is false
+    /// (an expanded split, whose detail they are), they are UIKit's to push.
+    func placingResults(_ stack: [RouteController], on nav: UINavigationController?, inPlace: Bool, collapsed: Bool = false) -> [RouteController] {
         var placed: RouteController?
         if inPlace {
             for (index, list) in stack.enumerated() where index + 1 < stack.count {
                 guard let results = resultsRoute(of: list.search?.field, in: stack), results === stack[index + 1] else { continue }
-                if results.parent === list || (results.parent == nil && nav.map { $0.viewControllers.count == 1 && $0.viewControllers[0] === list } == true) { placed = results }
+                if results.parent === list || (collapsed && index == 0) ||
+                    (results.parent == nil && nav.map { $0.viewControllers.count == 1 && $0.viewControllers[0] === list } == true) { placed = results }
                 break
             }
         }
@@ -111,6 +113,8 @@ extension NavigationHost {
 
     private func attach(_ results: RouteController, to list: RouteController) {
         guard results.parent !== list else { return }
+        // Results a collapsed split brought over the list in its detail's stack leave that stack first
+        if let nav = results.parent as? UINavigationController { nav.setViewControllers(nav.viewControllers.filter { $0 !== results }, animated: false) }
         list.addChild(results)
         results.view.frame = list.view.bounds
         results.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]

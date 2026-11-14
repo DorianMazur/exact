@@ -194,6 +194,38 @@ final class SearchLevelsIOSTests: XCTestCase {
         XCTAssertEqual(try node(session, "search").props["value"], "x", "Back keeps the text")
     }
 
+    /// Expanded, results typed over a page; collapsed (a fold), the list draws them under its field, as when they are
+    /// typed at the collapsed list, the page staying the one the list left; expanded again, the page is back under them
+    /// (LLP 1127.000 D2, D8).
+    func testACollapseUnderTheResultsDrawsThemInTheListAndAnExpansionPutsThePageBack() throws {
+        guard UIApplication.shared.connectedScenes.first is UIWindowScene else { throw missing("scene", "UIKit presents a search in a transition only in a window a scene holds") }
+        let (session, split) = try boot(size: CGSize(width: 1100, height: 800), regular: true)
+        let navigation = session.presenter.navigation, agent = Agent(session: session)
+        until("expanded") { !split.controller.isCollapsed && !agent.nativeInFlight() }
+        XCTAssertNil(agent.tap(["id": Int(try node(session, "row-a").id)])["error"])
+        until("the book shows") { has(session, "book-a") && split.detail.viewControllers.count == 1 && !agent.nativeInFlight() }
+        let (list, search) = try listSearch(split)
+        session.presenter.focusElement(["levels-search"])
+        until("the results are pushed over the book") { split.detail.viewControllers.count == 2 && !agent.nativeInFlight() }
+        until("the search is open") { opened(search) }
+        search.controller.searchBar.searchTextField.insertText("x")
+        until("the app hears the text") { (try? node(session, "search"))?.props["value"] == "x" }
+        until("UIKit shows the router's stack") { navigation.shownKeys.last == navigation.selectedKey && !agent.nativeInFlight() }
+        collapse()
+        until("collapsed with the results drawn in the list") {
+            split.controller.isCollapsed && navigation.resultsInPlace?.parent === list && navigation.selectedKey == routeKey(session, "results")
+                && !has(session, "book-a") && !agent.nativeInFlight()
+        }
+        XCTAssertEqual(split.list.viewControllers.map { $0 as? RouteController }, [list], "no push: the field stays in the list's bar")
+        XCTAssertEqual(try node(session, "search").props["value"], "x")
+        expand()
+        let detail = { split.detail.viewControllers.map { ($0 as? RouteController)?.key } }
+        until("the book is back under the results") {
+            !split.controller.isCollapsed && !agent.nativeInFlight() && detail() == [routeKey(session, "book-a"), routeKey(session, "results")]
+        }
+        XCTAssertNil(navigation.resultsInPlace, "expanded, the results are the detail's")
+    }
+
     /// The docked keys are a region of the window, as SwiftUI's keyboard region is: expanded, the detail beside the
     /// list whose bar field took them takes the part they cover as its bottom cover, as the field's own route does, so
     /// its content height leaves the keys out (a route's edge scroller is inset instead, LLP 1116.000 D1.2).
@@ -252,6 +284,13 @@ final class SearchLevelsIOSTests: XCTestCase {
         window.frame = CGRect(x: 0, y: 0, width: 1100, height: 800)
         window.rootViewController?.view.subviews.first?.frame = window.bounds
         window.traitOverrides.horizontalSizeClass = .regular
+    }
+
+    private func collapse() {
+        guard let window else { return }
+        window.frame = CGRect(x: 0, y: 0, width: 402, height: 874)
+        window.rootViewController?.view.subviews.first?.frame = window.bounds
+        window.traitOverrides.horizontalSizeClass = .compact
     }
 
     /// UIKit has moved the bar into search and its field is the person's to type in: during that move UIKit's floating
