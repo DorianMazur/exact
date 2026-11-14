@@ -254,6 +254,36 @@ final class SearchLevelsIOSTests: XCTestCase {
         XCTAssertLessThan(edges.bottom, keys, "the keys gone, its cover is the window's safe area again")
     }
 
+    /// The search field UIKit floats on the keys as it edits (iOS 26: in a bar of its own, out of every navigation bar)
+    /// covers what lies under that bar as the keys do: the bar is the edge scroller's bottom inset, while the route's
+    /// cover stays the keys, which UIKit places the bar above (LLP 1127.000 D9).
+    func testTheSearchFieldFloatedOnTheKeysInsetsTheEdgeScroller() throws {
+        guard UIApplication.shared.connectedScenes.first is UIWindowScene else { throw missing("scene", "UIKit presents a search in a transition only in a window a scene holds") }
+        let (session, split) = try boot(size: CGSize(width: 1100, height: 800), regular: true)
+        let p = session.presenter, navigation = p.navigation, agent = Agent(session: session)
+        until("expanded") { !split.controller.isCollapsed && !agent.nativeInFlight() }
+        session.presenter.focusElement(["levels-search"])
+        until("the results are the detail") { (split.detail.topViewController as? RouteController)?.key == routeKey(session, "results") && !agent.nativeInFlight() }
+        let results = try XCTUnwrap(split.detail.topViewController as? RouteController)
+        let scroll = try XCTUnwrap(results.edgeScroll?.scrollView, "the results' edge scroller")
+        let keys: CGFloat = 300, gap: CGFloat = 8, bar: CGFloat = 48
+        let floating = UIView(frame: CGRect(x: 200, y: 800 - keys - gap - bar, width: 600, height: bar))
+        let field = UISearchTextField(frame: CGRect(x: 0, y: 10, width: 600, height: 28))
+        floating.addSubview(field)
+        split.controller.view.addSubview(floating)
+        defer { floating.removeFromSuperview() }
+        let rest = scroll.adjustedContentInset.bottom
+        setKeyboard(p, top: 800 - keys, responder: field)
+        _ = agent.clock(["settle": true])
+        guard case .edges(let edges)? = navigation.covers[results.node.id] else { return XCTFail("no cover") }
+        XCTAssertEqual(edges.bottom, keys, accuracy: 0.5, "the keys are the route's cover, which UIKit places the bar above")
+        let end = scroll.convert(scroll.bounds, to: nil).maxY - scroll.adjustedContentInset.bottom
+        XCTAssertEqual(end, floating.frame.minY, accuracy: 0.5, "the scroller's content ends at the top of the field's bar")
+        setKeyboard(p, top: nil, responder: field)
+        _ = agent.clock(["settle": true])
+        XCTAssertEqual(scroll.adjustedContentInset.bottom, rest, accuracy: 0.5, "the keys gone, the inset is the one at rest")
+    }
+
     // MARK: helpers
 
     private func boot(size: CGSize = CGSize(width: 402, height: 874), regular: Bool = false) throws -> (ExactSession, SplitIOS) {

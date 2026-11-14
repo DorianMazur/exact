@@ -10,6 +10,9 @@ final class RouteController: UIViewController, UIScrollViewDelegate {
     fileprivate var usesPageViewport = false
     private(set) var contentViewport: Viewport?
     private let keyboardInset = KeyboardInset()
+    /// The bar of the search field UIKit floats on the keys, in the edge scroller's bottom inset (`fitContentViewport`).
+    private let fieldBar = KeyboardInset()
+    private weak var fieldBarScroll: UIScrollView?
     var contentMount: UIView { contentViewport ?? view }
     private var viewportKeyboardDismissal: UIScrollView.KeyboardDismissMode { node.props["keyboardDismissMode"] == nil ? .interactive : node.keyboardDismissal }
     /// What Exact last projected into the navigation item, and that plus
@@ -262,7 +265,8 @@ final class RouteController: UIViewController, UIScrollViewDelegate {
         // they cover takes the part they cover as bottom safe area, whichever column's field took them, so UIKit insets
         // its edge scroller and its content height leaves them out. The route whose own editor takes them is shortened
         // instead (`block(in:)`), a visual viewport takes them as its inset, `overlays-content` lets them cover, and a
-        // route under a presentation keeps its own.
+        // route under a presentation keeps its own. The bar UIKit floats the editing search field in, which it places
+        // above that safe area, is its edge scroller's bottom inset (`fieldBarInset`).
         if let presenter = host?.presenter {
             var keys: CGFloat = 0
             if contentViewport == nil, presenter.keyboardPolicy != "overlays-content", !presenter.edits(in: view), !presentedOver,
@@ -271,6 +275,9 @@ final class RouteController: UIViewController, UIScrollViewDelegate {
                 keys = max(0, view.bounds.maxY - edge - (view.safeAreaInsets.bottom - additionalSafeAreaInsets.bottom))
             }
             if additionalSafeAreaInsets.bottom != keys { additionalSafeAreaInsets.bottom = keys }
+            let scroll = edgeScroll?.scrollView
+            if fieldBarScroll !== scroll { fieldBarScroll.map { fieldBar.apply(0, to: $0) }; fieldBar.reset(); fieldBarScroll = scroll }
+            if let scroll { fieldBar.apply(keys > 0 ? presenter.fieldBarInset(over: self) : 0, to: scroll) }
         }
         #endif
         guard let scroll = contentViewport, let presenter = host?.presenter else { return }
