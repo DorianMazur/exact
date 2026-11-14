@@ -6,21 +6,25 @@ import XCTest
 /// A custom invoker's pull-down grows out of the invoker and shrinks back
 /// into it, as a stock button's menu does (#117): UIKit previews the
 /// invoker node, clipped to its corners, not the transparent overlay that
-/// holds the menu, and hides it while the menu shows. UIKit, so a
+/// holds the menu, and hides it while the menu shows. What UIKit draws in
+/// its place leaves out the invoker's own layer fill, so a filled invoker
+/// lends its fill to a sublayer until the menu has ended. UIKit, so a
 /// simulator runs it: `bun host/apple/build.mjs --test --ios --only PullDownPreviewIOSTests`.
 final class PullDownPreviewIOSTests: XCTestCase {
     private var window: UIWindow!
 
-    private func presenter() -> Presenter {
+    private func presenter(glass: Bool = true) -> Presenter {
         let p = Presenter()
         window = UIWindow(frame: CGRect(x: 0, y: 0, width: 400, height: 400))
         p.viewport.frame = window.bounds
         window.addSubview(p.viewport)
         window.makeKeyAndVisible()
+        // A glass pill, or one whose fill is its own layer's (set by the test).
+        let props: [String: Any] = glass ? ["popovertarget": "m", "backgroundMaterial": "glass"] : ["popovertarget": "m"]
         // A screen (1): a glass pill (2) that opens its menu (3) of one row (4).
         p.apply(wireBatch([
             ["op": "create", "id": 1, "kind": "view"],
-            ["op": "create", "id": 2, "kind": "button", "props": ["popovertarget": "m", "backgroundMaterial": "glass"]],
+            ["op": "create", "id": 2, "kind": "button", "props": props],
             ["op": "style", "id": 2, "style": ["border_radius": 22]],
             ["op": "create", "id": 3, "kind": "view", "props": ["id": "m", "popover": "auto", "role": "menu"]],
             ["op": "create", "id": 4, "kind": "button", "handlers": ["press"], "props": ["role": "menuitem", "popovertarget": "m", "popovertargetaction": "hide"]],
@@ -56,6 +60,31 @@ final class PullDownPreviewIOSTests: XCTestCase {
             let center = invoker.convert(CGPoint(x: invoker.bounds.midX, y: invoker.bounds.midY), to: preview.target.container)
             XCTAssertEqual(preview.target.center, center, "\(name): where the invoker is")
         }
+    }
+
+    func testAFilledInvokerLendsItsFillToASublayerWhileItsMenuHasIt() throws {
+        let p = presenter(glass: false)
+        defer { p.menus.reset() }
+        let invoker = try XCTUnwrap(p.views[2])
+        let fill = UIColor(white: 1, alpha: 0.08).cgColor
+        invoker.layer.backgroundColor = fill
+        let button = try XCTUnwrap(invoker.subviews.compactMap { $0 as? MenuButton }.first)
+        let interaction = try XCTUnwrap(button.contextMenuInteraction)
+        let configuration = UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in button.menu }
+        let preview = try XCTUnwrap(button.contextMenuInteraction(interaction, previewForHighlightingMenuWithConfiguration: configuration))
+        XCTAssertTrue(preview.view === invoker, "the invoker itself, which UIKit hides and morphs")
+        XCTAssertNil(invoker.layer.backgroundColor, "not on the layer UIKit's copy leaves out")
+        let lent = try XCTUnwrap(invoker.layer.sublayers?.first as? CAShapeLayer)
+        XCTAssertEqual(lent.fillColor, fill)
+        let box = try XCTUnwrap(lent.path?.boundingBox)
+        XCTAssertEqual(box.minX, invoker.bounds.minX, accuracy: 0.001)
+        XCTAssertEqual(box.width, invoker.bounds.width, accuracy: 0.001)
+        XCTAssertEqual(box.height, invoker.bounds.height, accuracy: 0.001)
+        // The menu shows and ends: the fill goes back to the invoker's layer.
+        button.contextMenuInteraction(interaction, willDisplayMenuFor: configuration, animator: nil)
+        button.contextMenuInteraction(interaction, willEndFor: configuration, animator: nil)
+        XCTAssertEqual(invoker.layer.backgroundColor, fill)
+        XCTAssertFalse(invoker.layer.sublayers?.contains(lent) ?? false)
     }
 
     func testAnInvokerOutOfTheWindowHasNoPreview() throws {

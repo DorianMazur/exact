@@ -147,23 +147,52 @@ final class BarTouch: UIGestureRecognizer, UIGestureRecognizerDelegate {
 /// menu shows, and the invoker, not this transparent overlay, the shape the
 /// menu grows out of and shrinks back into. UIKit hides the view it previews
 /// while the menu shows, so the invoker's own glass is not drawn under the
-/// menu's, as a stock button's is not.
+/// menu's, as a stock button's is not. What UIKit draws in its place is a
+/// live copy that leaves out the invoker's own layer fill, so while the menu
+/// has it that fill is a sublayer, which the copy draws (`lendFill`).
 final class MenuButton: InvokerButton {
     weak var focus: MenuFocus?
     weak var popover: NodeView?
     var toggled: ((Bool) -> Void)?
     private(set) var isMenuOpen = false
     private var menuConfiguration: UIContextMenuConfiguration?
+    /// The invoker's fill as a sublayer while UIKit previews the invoker.
+    private var lentFill: CALayer?
     func dismissMenu() {
         guard isMenuOpen else { return }
         isMenuOpen = false
         toggled?(false)
         contextMenuInteraction?.dismissMenu()
     }
+    /// The invoker's own layer fill (not a glass material's) moved to a
+    /// sublayer of its shape, under its children, until `returnFill`.
+    private func lendFill() {
+        guard lentFill == nil, let node = invoker, node.glassBody == nil, let fill = node.layer.backgroundColor, fill.alpha > 0 else { return }
+        let lent = CAShapeLayer()
+        lent.frame = node.layer.bounds
+        lent.path = (LiftTarget.rounded(node) ?? UIBezierPath(rect: node.bounds)).cgPath
+        lent.fillColor = fill
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        node.layer.insertSublayer(lent, at: 0)
+        node.layer.backgroundColor = nil
+        CATransaction.commit()
+        lentFill = lent
+    }
+    /// The fill back on the invoker's layer, unless the page set a new one meanwhile.
+    private func returnFill() {
+        guard let lent = lentFill as? CAShapeLayer else { return }
+        lentFill = nil
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if let node = invoker, node.layer.backgroundColor == nil { node.layer.backgroundColor = lent.fillColor }
+        lent.removeFromSuperlayer()
+        CATransaction.commit()
+    }
     // An invoker hidden or out of the window (unmounted while its menu
     // showed) has no preview: UIKit's default, nil outside a window.
     override func contextMenuInteraction(_ interaction: UIContextMenuInteraction, previewForHighlightingMenuWithConfiguration configuration: UIContextMenuConfiguration) -> UITargetedPreview? {
-        if let preview = invoker.flatMap(LiftTarget.preview(of:)) { return preview }
+        if let preview = invoker.flatMap(LiftTarget.preview(of:)) { lendFill(); return preview }
         return window == nil ? nil : super.contextMenuInteraction(interaction, previewForHighlightingMenuWithConfiguration: configuration)
     }
     override func contextMenuInteraction(_ interaction: UIContextMenuInteraction, previewForDismissingMenuWithConfiguration configuration: UIContextMenuConfiguration) -> UITargetedPreview? {
@@ -185,6 +214,7 @@ final class MenuButton: InvokerButton {
         let ended: () -> Void = { [weak self] in
             guard let self, self.menuConfiguration === configuration else { return }
             self.menuConfiguration = nil
+            self.returnFill()
             self.focus?.restore()
         }
         guard let animator else { ended(); return }
