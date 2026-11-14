@@ -486,6 +486,16 @@ impl<G: Game, P: Executor, const ASSETS: bool, H: crate::Hooks> WorldSurface<G, 
             self.assets_dirty = true;
             return true;
         }
+        // A picture still awaiting its first complete frame waits again for
+        // what these ticks show: a tick after the invalidation can change the
+        // look to something not yet delivered.
+        if ASSETS && self.picture.1 && {
+            sim.refresh_presented();
+            !sim.presented_assets_resident()
+        } {
+            self.assets_dirty = true;
+            return true;
+        }
         self.perf.ticks.push(ticks as f64);
         if self.error.is_some() {
             return false;

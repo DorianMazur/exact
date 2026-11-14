@@ -339,17 +339,12 @@ fn a_new_picture_from_a_message_waits_for_its_shown_texture() {
     }
     assert!(!prepared(&s).contains(&"green.tex"));
     drop(held);
-    let mut complete = None;
-    for _ in 0..500 {
-        now += 20.;
-        let pixels = fixture::render(&gpu, &mut s, &live(now)).unwrap().0;
-        if s.frame_ready() {
-            complete = Some(pixels);
-            break;
-        }
-        std::thread::yield_now();
-    }
-    assert_eq!(hue(&complete.expect("the new picture became ready")), 1);
+    assert_eq!(
+        hue(&super::cosmetics::render_until_ready(
+            &gpu, &mut s, &mut now
+        )),
+        1
+    );
     assert!(prepared(&s).contains(&"green.tex"));
 }
 

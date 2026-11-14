@@ -85,6 +85,33 @@ pub(super) fn quad(texture: &str) -> Model {
         ..Default::default()
     }
 }
+/// Live frames from `now` until one is complete (`frame_ready`), its pixels:
+/// what it waits for (an upload's worker) is not on the frame's clock, so the
+/// bound is wall-clock time, which only stops a test that would hang.
+pub(super) fn render_until_ready<G: Game>(
+    gpu: &Gpu,
+    s: &mut WorldSurface<G, crate::ModelExecutor, true>,
+    now: &mut f64,
+) -> fixture::Pixels {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        *now += 20.;
+        let frame = Frame {
+            seekable: false,
+            ..frame(*now)
+        };
+        let pixels = fixture::render(gpu, s, &frame).unwrap().0;
+        if s.frame_ready() {
+            return pixels;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the new picture became ready"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+}
+
 /// A solid 4×4 sRGB texture with its mips, as a delivered `.tex` file.
 pub(super) fn solid(rgb: [u8; 3]) -> Vec<u8> {
     let texel = [rgb[0], rgb[1], rgb[2], 255];
@@ -536,15 +563,52 @@ fn a_new_picture_waits_for_a_shown_texture_not_yet_delivered() {
     }
     assert!(s.assets().requests.contains(&"blue.tex".to_owned()));
     s.asset("blue.tex", Ok(&solid([0, 0, 255])));
-    let mut complete = None;
-    for _ in 0..500 {
+    assert_eq!(hue(&render_until_ready(&gpu, &mut s, &mut now)), 2);
+}
+
+#[test]
+fn a_tick_after_the_invalidation_that_shows_an_undelivered_texture_waits() {
+    let Some(gpu) = gpu() else { return };
+    let mut s = WorldSurface::<Dice, crate::ModelExecutor, true>::default();
+    s.device_ready(exact_gpu::wgpu::Features::empty());
+    let live = |now| Frame {
+        seekable: false,
+        ..frame(now)
+    };
+    s.bind(
+        &[Value::Number(0u32.into()), Value::Number(0u32.into())],
+        None,
+    )
+    .unwrap();
+    s.clock(false);
+    s.asset("red.tex", Ok(&solid([255, 0, 0])));
+    let mut now = 0.;
+    render_until_ready(&gpu, &mut s, &mut now);
+    // The import's frame replaces the picture: what it shows is resident.
+    s.input(&exact_gpu::InputEvent::Message {
+        text: "import".into(),
+        at_ms: now + 1.,
+    });
+    now += 20.;
+    fixture::render(&gpu, &mut s, &live(now)).unwrap();
+    assert!(!s.frame_ready());
+    // The next frame's tick changes the shape to one whose texture has not
+    // arrived; before its ticks, the old shape was resident.
+    s.bind(
+        &[Value::Number(0u32.into()), Value::Number(1u32.into())],
+        None,
+    )
+    .unwrap();
+    for _ in 0..3 {
         now += 20.;
-        let pixels = fixture::render(&gpu, &mut s, &live(now)).unwrap().0;
-        if s.frame_ready() {
-            complete = Some(pixels);
-            break;
-        }
-        std::thread::yield_now();
+        fixture::render(&gpu, &mut s, &live(now)).unwrap();
+        assert!(
+            !s.frame_ready(),
+            "a ticked look not delivered cannot present"
+        );
+        assert!(s.ready_work.is_none());
     }
-    assert_eq!(hue(&complete.expect("the new picture became ready")), 2);
+    assert!(s.assets().requests.contains(&"yellow.tex".to_owned()));
+    s.asset("yellow.tex", Ok(&solid([255, 255, 0])));
+    assert_eq!(hue(&render_until_ready(&gpu, &mut s, &mut now)), 3);
 }
