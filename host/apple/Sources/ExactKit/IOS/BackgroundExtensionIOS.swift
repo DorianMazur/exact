@@ -94,6 +94,7 @@ extension NodeView {
 
     /// The image let its picture go (destroyed or parked), or stopped extending its background: its blurs go with it.
     func dropExtensionBlurs() {
+        Self.blurs.object(forKey: self)?.cancel()
         Self.blurs.removeObject(forKey: self)
     }
 

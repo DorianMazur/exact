@@ -53,7 +53,10 @@ final class NodeAside {
     var content = CGSize.zero
     var image: UIImage?
     var raster: NativeRasterLease?
-    /// The load (`loadGeneration`) whose lease `raster` is: another decode of the same picture keeps it
+    /// The loads asked for the node's picture (`RasterLoader.load`): each is another picture to the background
+    /// extension's blurs, as a changed package picture is, where a decode at another size is not
+    var loadsAsked = 0
+    /// `loadsAsked` when the lease `raster` was asked for: another decode of the same picture keeps it
     var rasterLoad = 0
     var imageLayer: CALayer?
     var imageSource: String?
@@ -266,6 +269,7 @@ extension NodeView {
         }
     }
     var rasterLoad: Int { get { aside?.rasterLoad ?? 0 } set { if newValue != 0 || aside != nil { asideMade.rasterLoad = newValue } } }
+    var loadsAsked: Int { get { aside?.loadsAsked ?? 0 } set { if newValue != 0 || aside != nil { asideMade.loadsAsked = newValue } } }
     /// An image's pixels as a sublayer's contents (`applyImageLayer`).
     var imageLayer: CALayer? { get { aside?.imageLayer } set { if newValue != nil || aside != nil { asideMade.imageLayer = newValue } } }
     var imageSource: String? { get { aside?.imageSource } set { if newValue != nil || aside != nil { asideMade.imageSource = newValue } } }

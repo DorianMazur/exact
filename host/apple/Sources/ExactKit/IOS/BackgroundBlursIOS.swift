@@ -23,10 +23,12 @@ final class ExtensionBlurs {
     private(set) var made: Made?
     /// What the extension last asked for, which blurs made off the main thread are checked against as they land
     private var wanted: (source: CGImage, load: Int?, sigmas: [CGFloat])?
-    /// Blurs are being made off the main thread: one at a time, the latest `wanted` made when they land
-    private var making = false
+    /// The blurs being made off the main thread, one at a time
+    private var job: Job?
     /// Shows blurs made off the main thread (`ExtensionView`)
     var landed: (() -> Void)?
+
+    deinit { job?.cancel() }
 
     /// Asks for the blurs of `source` by `sigmas`. Those made stand while their source is the same and each sigma is
     /// within a quarter of the one asked for; those of the same picture stand while new ones are made off the main
@@ -38,21 +40,28 @@ final class ExtensionBlurs {
         made = Made(source: source, load: load, sigmas: sigmas, images: Self.blurs(source, sigmas))
     }
 
+    /// The image's blurs went: those being made let their source go, and land nowhere.
+    func cancel() {
+        job?.cancel()
+        job = nil
+    }
+
     private func makeLatest() {
-        guard !making, let job = wanted else { return }
-        making = true
+        // A call while blurs are made loses nothing: `wanted` holds it, and they make it when they land
+        guard job == nil, let asked = wanted else { return }
+        let job = Job(asked.source, load: asked.load, sigmas: asked.sigmas)
+        self.job = job
         Self.queue.async { [weak self] in
-            // Nothing for an image gone meanwhile (destroyed, or its picture let go)
-            guard self != nil else { return }
-            let images = Self.blurs(job.source, job.sigmas)
+            guard self != nil, let source = job.source else { return }
+            let images = Self.blurs(source, job.sigmas)
             DispatchQueue.main.async {
-                guard let self else { return }
-                self.making = false
+                guard let self, self.job === job else { return }
+                self.job = nil
                 // Nothing more while those made serve what is asked now: the picture came back to their size
                 guard let now = self.wanted, let made = self.made, !Self.serves(made, now.source, now.sigmas) else { return }
                 // These are kept while of the picture made: one blurred at once meanwhile supersedes them
                 if job.load == made.load {
-                    let kept = Made(source: job.source, load: job.load, sigmas: job.sigmas, images: images)
+                    let kept = Made(source: source, load: job.load, sigmas: job.sigmas, images: images)
                     self.made = kept
                     self.landed?()
                     if Self.serves(kept, now.source, now.sigmas) { return }
@@ -61,6 +70,18 @@ final class ExtensionBlurs {
                 self.makeLatest()
             }
         }
+    }
+
+    /// Blurs on the queue. Their source goes when they are cancelled, so pixels the raster budget took back are not
+    /// held by work waiting to be skipped.
+    private final class Job: @unchecked Sendable {
+        let load: Int?, sigmas: [CGFloat]
+        private let lock = NSLock()
+        private var held: CGImage?
+        init(_ source: CGImage, load: Int?, sigmas: [CGFloat]) { (held, self.load, self.sigmas) = (source, load, sigmas) }
+        /// The source, nil once cancelled: read on the queue, cancelled on the main thread
+        var source: CGImage? { lock.lock(); defer { lock.unlock() }; return held }
+        func cancel() { lock.lock(); held = nil; lock.unlock() }
     }
 
     /// Whether blurs made serve `source` by `sigmas`: the same source, each sigma within a quarter of the one asked for

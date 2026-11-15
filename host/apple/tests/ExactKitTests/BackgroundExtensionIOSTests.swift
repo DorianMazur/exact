@@ -229,6 +229,32 @@ final class BackgroundExtensionIOSTests: XCTestCase {
         XCTAssertTrue(back.blurs.made?.images.elementsEqual(resized.images, by: ===) ?? false, "back in it, a new extension draws the blurs made")
     }
 
+    /// Another load's pixels (a new `src`, or a package picture that changed) are blurred at once; another decode of
+    /// the same load is blurred off the main thread while the blurs made stand; cancelled, those being made land
+    /// nowhere.
+    func testAnotherLoadIsBlurredAtOnceAndCancelledBlursLandNowhere() throws {
+        func pixels(_ color: UIColor, width: CGFloat) throws -> CGImage {
+            let format = UIGraphicsImageRendererFormat(); format.scale = 1
+            return try XCTUnwrap(UIGraphicsImageRenderer(size: CGSize(width: width, height: 10), format: format).image { context in
+                color.setFill(); context.fill(CGRect(x: 0, y: 0, width: width, height: 10))
+            }.cgImage)
+        }
+        let blurs = ExtensionBlurs(), sigmas: [CGFloat] = [1, 2.5, 6, 15]
+        let red = try pixels(.red, width: 30), blue = try pixels(.blue, width: 30), larger = try pixels(.blue, width: 60)
+        blurs.want(red, load: 1, sigmas: sigmas)
+        blurs.want(blue, load: 2, sigmas: sigmas)
+        XCTAssertTrue(blurs.made?.source === blue, "another load's pixels are blurred at once")
+        blurs.want(larger, load: 2, sigmas: sigmas.map { $0 * 2 })
+        XCTAssertTrue(blurs.made?.source === blue, "another decode of the load keeps the blurs made meanwhile")
+        let deadline = Date(timeIntervalSinceNow: 2)
+        while blurs.made?.source !== larger, Date() < deadline { RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 0.02)) }
+        XCTAssertTrue(blurs.made?.source === larger, "then draws those made for it")
+        blurs.want(blue, load: 2, sigmas: sigmas)
+        blurs.cancel()
+        RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 0.3))
+        XCTAssertTrue(blurs.made?.source === larger, "cancelled, the blurs being made land nowhere")
+    }
+
     /// When an image's picture is replaced, its blurs stay while its extension shows, which draws them until those of
     /// the new pixels land, and go when it shows none: they are not kept for pixels it no longer holds.
     func testAReplacedPictureKeepsItsBlursOnlyWhileItsExtensionShows() throws {
