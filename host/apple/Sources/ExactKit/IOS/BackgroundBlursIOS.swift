@@ -7,8 +7,9 @@
 // another resolution keeps drawing the blurs made for it, scaled with it,
 // while those for its new size are made off the main thread: made on it, they
 // took 6 to 8 ms of a frame each time a pull passed the tolerance. A picture
-// with no blurs yet, a different picture or an animated image's next frame is
-// blurred at once, so a mirror is never drawn unblurred or from other pixels.
+// with no blurs yet, a different picture, a decode of another shape (an SVG
+// placed anew) or an animated image's next frame is blurred at once, so a
+// mirror is never drawn unblurred or from other content.
 #if os(iOS) || os(tvOS)
 import CoreImage
 import UIKit
@@ -31,12 +32,13 @@ final class ExtensionBlurs {
     deinit { job?.cancel() }
 
     /// Asks for the blurs of `source` by `sigmas`. Those made stand while their source is the same and each sigma is
-    /// within a quarter of the one asked for; those of the same picture stand while new ones are made off the main
-    /// thread (`landed`); else they are made at once.
+    /// within a quarter of the one asked for; those of the same picture (its load, at the same shape) stand while new
+    /// ones are made off the main thread (`landed`); else they are made at once, and any being made are cancelled.
     func want(_ source: CGImage, load: Int?, sigmas: [CGFloat]) {
         wanted = (source, load, sigmas)
         if let made, Self.serves(made, source, sigmas) { return }
-        if let made, let load, made.load == load { return makeLatest() }
+        if let made, let load, made.load == load, Self.sameShape(made.source, source) { return makeLatest() }
+        cancel()
         made = Made(source: source, load: load, sigmas: sigmas, images: Self.blurs(source, sigmas))
     }
 
@@ -82,6 +84,13 @@ final class ExtensionBlurs {
         /// The source, nil once cancelled: read on the queue, cancelled on the main thread
         var source: CGImage? { lock.lock(); defer { lock.unlock() }; return held }
         func cancel() { lock.lock(); held = nil; lock.unlock() }
+    }
+
+    /// Whether two decodes of a load show its picture at another resolution: they have one shape. An SVG drawn into a
+    /// box of another shape under `object-fit: fill` is placed anew.
+    private static func sameShape(_ a: CGImage, _ b: CGImage) -> Bool {
+        let (across, down) = (CGFloat(a.width) * CGFloat(b.height), CGFloat(b.width) * CGFloat(a.height))
+        return abs(across - down) <= 0.02 * max(across, down)
     }
 
     /// Whether blurs made serve `source` by `sigmas`: the same source, each sigma within a quarter of the one asked for

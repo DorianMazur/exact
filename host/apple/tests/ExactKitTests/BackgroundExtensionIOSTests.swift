@@ -229,18 +229,18 @@ final class BackgroundExtensionIOSTests: XCTestCase {
         XCTAssertTrue(back.blurs.made?.images.elementsEqual(resized.images, by: ===) ?? false, "back in it, a new extension draws the blurs made")
     }
 
-    /// Another load's pixels (a new `src`, or a package picture that changed) are blurred at once; another decode of
-    /// the same load is blurred off the main thread while the blurs made stand; cancelled, those being made land
-    /// nowhere.
+    /// Another load's pixels (a new `src`, or a package picture that changed), or a decode of another shape (an SVG
+    /// placed anew), are blurred at once and cancel the blurs being made; another decode of the same load and shape is
+    /// blurred off the main thread while the blurs made stand; cancelled, those being made land nowhere.
     func testAnotherLoadIsBlurredAtOnceAndCancelledBlursLandNowhere() throws {
-        func pixels(_ color: UIColor, width: CGFloat) throws -> CGImage {
+        func pixels(_ color: UIColor, _ width: CGFloat, _ height: CGFloat) throws -> CGImage {
             let format = UIGraphicsImageRendererFormat(); format.scale = 1
-            return try XCTUnwrap(UIGraphicsImageRenderer(size: CGSize(width: width, height: 10), format: format).image { context in
-                color.setFill(); context.fill(CGRect(x: 0, y: 0, width: width, height: 10))
+            return try XCTUnwrap(UIGraphicsImageRenderer(size: CGSize(width: width, height: height), format: format).image { context in
+                color.setFill(); context.fill(CGRect(x: 0, y: 0, width: width, height: height))
             }.cgImage)
         }
         let blurs = ExtensionBlurs(), sigmas: [CGFloat] = [1, 2.5, 6, 15]
-        let red = try pixels(.red, width: 30), blue = try pixels(.blue, width: 30), larger = try pixels(.blue, width: 60)
+        let red = try pixels(.red, 30, 10), blue = try pixels(.blue, 30, 10), larger = try pixels(.blue, 60, 20)
         blurs.want(red, load: 1, sigmas: sigmas)
         blurs.want(blue, load: 2, sigmas: sigmas)
         XCTAssertTrue(blurs.made?.source === blue, "another load's pixels are blurred at once")
@@ -253,6 +253,13 @@ final class BackgroundExtensionIOSTests: XCTestCase {
         blurs.cancel()
         RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 0.3))
         XCTAssertTrue(blurs.made?.source === larger, "cancelled, the blurs being made land nowhere")
+        let wide = try pixels(.blue, 120, 20)
+        blurs.want(wide, load: 2, sigmas: sigmas)
+        XCTAssertTrue(blurs.made?.source === wide, "a decode of another shape is blurred at once")
+        blurs.want(larger, load: 2, sigmas: sigmas)
+        blurs.want(red, load: 3, sigmas: sigmas)
+        RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 0.3))
+        XCTAssertTrue(blurs.made?.source === red, "another picture blurred at once cancels the blurs being made")
     }
 
     /// When an image's picture is replaced, its blurs stay while its extension shows, which draws them until those of
