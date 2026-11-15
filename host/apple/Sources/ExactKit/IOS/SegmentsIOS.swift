@@ -42,6 +42,10 @@ class LabelledSegmentedControl: UISegmentedControl {
     }
 }
 
+/// UIKit's segment view class, compared by identity: describing each subview's type made a string of its name for
+/// every view walked
+private let segmentClass: AnyClass? = NSClassFromString("UISegment")
+
 extension UISegmentedControl {
     /// The segment views (`UISegment`, two containers down on iOS 27), in
     /// segment order: left to right, reversed right to left.
@@ -49,7 +53,7 @@ extension UISegmentedControl {
         var found: [UIView] = []
         func walk(_ view: UIView, _ depth: Int) {
             for child in view.subviews {
-                if String(describing: type(of: child)) == "UISegment" { found.append(child) } else if depth < 3 { walk(child, depth + 1) }
+                if type(of: child) == segmentClass { found.append(child) } else if depth < 3 { walk(child, depth + 1) }
             }
         }
         walk(self, 0)
