@@ -185,6 +185,13 @@ const HOST_FACTS: &[&str] = &[
 ];
 
 pub fn emit(plan: &Plan, site_attrs: bool, dev_reload: bool) -> Result<Output, String> {
+    if plan
+        .bindings
+        .iter()
+        .any(|b| b.kind == BindingKind::Prop && b.id == PropId::SharedContent as u16)
+    {
+        return Err("the JS target does not support `sharedContent`".into());
+    }
     // A development build makes every token a property (LLP 1121 stage 4).
     let _every = crate::modes::every_for(plan, dev_reload);
     // And every overridden role its sheet's property (stage 5).

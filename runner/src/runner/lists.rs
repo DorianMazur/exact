@@ -228,8 +228,10 @@ impl<D: DataSource> Runner<D> {
             u.owned = owned;
             u.owned_sends = owned_sends;
             u.reuse = self.reuse;
-            update(&mut tree, &mut u)
-                .map(|_| (u.ops, u.surfaces, u.notes, u.renewed, u.shown, u.work))
+            update(&mut tree, &mut u).map(|_| {
+                tree.place_shared_content(&mut u);
+                (u.ops, u.surfaces, u.notes, u.renewed, u.shown, u.work)
+            })
         };
         self.ids = ids;
         self.tree = Some(tree);

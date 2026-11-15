@@ -24,6 +24,7 @@ mod owners;
 pub use owners::OwnerInst;
 mod rare;
 mod region;
+mod shared_content;
 pub mod tabs;
 mod text;
 pub mod theme;
@@ -1238,6 +1239,7 @@ pub(crate) fn invalid_face(view: ViewId, text: String, then: &str) -> String {
 /// The root of the instance tree: the plan's top-level sites.
 #[derive(Debug)]
 pub struct Tree {
+    shared_content: Option<Box<shared_content::Placement>>,
     has_collections: bool,
     children: Vec<Child>,
     last_roots: Vec<ViewId>,
@@ -1252,6 +1254,16 @@ impl Tree {
     pub fn create(u: &mut Update<'_>) -> Result<Tree, InstanceError> {
         let children = realize(u, None, None, &[])?;
         let mut tree = Tree {
+            shared_content: u
+                .env
+                .plan
+                .bindings
+                .iter()
+                .any(|b| {
+                    b.kind == BindingKind::Prop
+                        && b.id == exact_kernel::PropId::SharedContent as u16
+                })
+                .then(Box::default),
             has_collections: u.env.plan.bindings.iter().any(|b| {
                 b.kind == BindingKind::Prop
                     && b.id == exact_kernel::PropId::Virtualized as u16

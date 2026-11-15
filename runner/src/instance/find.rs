@@ -86,7 +86,13 @@ impl Tree {
     ) -> Option<(NodesId, Vec<Frame>)> {
         let mut chain = vec![view];
         while let Some(up) = parent(*chain.last().expect("nonempty")) {
-            chain.push(up);
+            // A slot is the physical parent; the child's event still runs
+            // in the lexical frames at its declaration.
+            chain.push(
+                self.shared_content
+                    .as_ref()
+                    .map_or(up, |p| p.authored_parent(up)),
+            );
         }
         let mut targets = chain.into_iter().rev();
         let mut frames = Vec::new();

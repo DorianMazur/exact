@@ -1084,7 +1084,8 @@ impl<D: DataSource> Runner<D> {
             let mut u = Update::new(runner.env(&[], &[]), &runner.sites, &mut ids);
             u.fonts = Some(runner.fonts.clone());
             u.discard = runner.kernel.is_detached();
-            let tree = Tree::create(&mut u)?;
+            let mut tree = Tree::create(&mut u)?;
+            tree.place_shared_content(&mut u);
             (tree, u.ops, u.surfaces, u.notes, u.shown)
         };
         runner.notes = notes;

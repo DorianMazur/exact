@@ -198,3 +198,60 @@ fn with_the_first_frame_rule_a_flight_lands_from_the_frame_that_started_it() {
     let done = host.tick_at(420.0, 417.0);
     assert!(done.contains(&land), "300 ms from the frame is: {done}");
 }
+
+#[test]
+fn shared_content_keeps_its_player_and_control_until_the_owner_leaves() {
+    let plan = contract::compile(include_str!(
+        "../../../../contract/corpus/shared-content.contract"
+    ))
+    .unwrap();
+    let (mut host, _) = Host::boot(
+        &plan.encode(),
+        NoData,
+        Box::new(MonospaceMeasurer::default()),
+        390.0,
+        844.0,
+    )
+    .unwrap();
+    let player = view(&host, "video").unwrap();
+    let control = view(&host, "count").unwrap();
+    let assert_count = |host: &Host<NoData>, expected: &str| {
+        let k = host.runner().kernel();
+        let button = k.node(view(host, "count").unwrap()).unwrap();
+        let label = k.node(button.children()[0]).unwrap();
+        assert_eq!(label.props.str(exact_kernel::PropId::Text), Some(expected));
+    };
+    let assert_place = |host: &Host<NoData>, name: &str| {
+        let slot = view(host, name).unwrap();
+        let kernel = host.runner().kernel();
+        assert_eq!(kernel.node(slot).unwrap().children(), [player, control]);
+        assert!(kernel
+            .node(view(host, "owner").unwrap())
+            .unwrap()
+            .children()
+            .is_empty());
+        assert_eq!(kernel.find_by_test_id("video").len(), 1);
+    };
+    assert_place(&host, "card");
+    for (at, name) in [(100.0, "detail"), (200.0, "card"), (500.0, "detail")] {
+        let move_batch = host.dispatch_at(view(&host, "toggle").unwrap(), Event::Press, at);
+        let slot = view(&host, name).unwrap();
+        assert!(move_batch.contains(&format!(r#""op":"flight","id":{slot},"from":"#)));
+        assert_place(&host, name);
+        host.tick(at + 50.0);
+    }
+    host.tick(1100.0);
+    host.dispatch_at(control, Event::Press, 1110.0);
+    assert_count(&host, "Count 1");
+    let back = host.dispatch_at(view(&host, "toggle").unwrap(), Event::Press, 1120.0);
+    assert!(!back.contains(&format!(r#""op":"destroy","id":{player}}}"#)));
+    assert_place(&host, "card");
+    host.dispatch_at(control, Event::Press, 1620.0);
+    assert_count(&host, "Count 2");
+    host.dispatch_at(view(&host, "remove").unwrap(), Event::Press, 1700.0);
+    assert!(host.runner().kernel().node(player).is_none());
+    assert!(host.runner().kernel().node(control).is_none());
+    host.dispatch_at(view(&host, "remove").unwrap(), Event::Press, 1800.0);
+    assert_ne!(view(&host, "video"), Some(player));
+    assert_count(&host, "Count 0");
+}

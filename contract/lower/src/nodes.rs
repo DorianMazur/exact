@@ -751,6 +751,11 @@ impl Lowerer<'_> {
                 a.span,
             );
         }
+        if let Some(a) = expanded.iter().find(|a| a.name == "sharedContent") {
+            if !matches!(tag.as_str(), "box" | "column" | "row" | "view") {
+                return err("lower-attr-tag", "`sharedContent` belongs on a box, column, row or view that owns the live children", a.span);
+            }
+        }
         crate::zoom::check(tag, t.node_type, expanded, children, *span)?;
         // The web draws a hit slop as a pseudo-element, which an element the
         // browser replaces cannot have (Charlie, 2026-11-10).

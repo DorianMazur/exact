@@ -4106,6 +4106,17 @@ which require optional capabilities. `-exact-spring(…)` (a `transition` timing
 function), `-exact-exit-animation`, `-exact-layout-transition`, and presentation timelines have
 specific documented behavior;
 they do not admit arbitrary frame callbacks or a second app-state graph.
+
+To move a playing video or a stateful control between native screens, declare it
+once inside a stable `box sharedContent="player"`. Give each active screen an
+empty `column sharedElement="player"` with its own size and layout transition.
+Replace the outgoing slot with the incoming slot in one update to start a flight.
+The children keep their identity and their actions resolve at their declaration.
+A name needs one owner and one empty slot in the same root, outside any owner.
+Otherwise its children render in place. Removing the owner releases its children.
+The web JS compiler refuses `sharedContent`.
+[Two routes sharing one video](../contract/corpus/shared-content.contract).
+
 As in CSS, a `transition` or `animation` value's units, keywords and function
 names read in any ASCII case (`0.3S EASE` is `0.3s ease`), its numbers are CSS's
 (`1.s` and `infs` are no times), and a keyframes name keeps its case: in

@@ -78,3 +78,73 @@ fn an_endless_exit_is_refused_at_compile_time() {
     assert_eq!(error.id, "lower-animation-name");
     assert!(error.message.contains("no `keyframes gone`"), "{error}");
 }
+
+#[test]
+fn shared_content_falls_back_to_its_owner_when_a_slot_cannot_receive_it() {
+    let plan = contract::compile(
+        r#"
+component App
+  state step = 0
+  action next
+    step = step + 1
+  view
+    column
+      button press=next testId="next"
+        text "Next"
+      box sharedContent="editor" testId="home"
+        text "Draft" testId="draft"
+        if step == 4
+          text "Extra" testId="extra"
+      if step < 5
+        box sharedElement="editor" testId="slot"
+          if step == 2
+            text "Occupied" testId="occupied"
+      if step == 1
+        box sharedElement="editor"
+      if step == 3
+        box sharedContent="editor"
+          text "Another owner"
+"#,
+    )
+    .unwrap();
+    let mut r = Runner::boot(
+        plan,
+        NoData,
+        Kernel::with_monospace(),
+        Default::default(),
+        "/",
+    )
+    .unwrap();
+    let view = |r: &Runner<NoData>, name: &str| {
+        r.kernel()
+            .node_by_key(r.kernel().find_first_by_test_id(name).unwrap())
+            .unwrap()
+            .id
+    };
+    let draft = view(&r, "draft");
+    let next = view(&r, "next");
+    for (step, parent) in ["slot", "home", "home", "home", "slot", "home"]
+        .iter()
+        .enumerate()
+    {
+        if step > 0 {
+            r.dispatch(next, Event::Press).unwrap();
+        }
+        assert_eq!(
+            r.kernel().node(draft).unwrap().parent,
+            Some(view(&r, parent))
+        );
+        if step == 2 {
+            assert_eq!(
+                r.kernel().node(view(&r, "slot")).unwrap().children(),
+                [view(&r, "occupied")]
+            );
+        }
+        if step == 4 {
+            assert_eq!(
+                r.kernel().node(view(&r, "slot")).unwrap().children(),
+                [draft, view(&r, "extra")]
+            );
+        }
+    }
+}

@@ -230,6 +230,11 @@ impl Tree {
         sites: &SiteIndex,
         fonts: Rc<RefCell<bridge::RuntimeFonts>>,
     ) -> Result<DocTree, DocTreeError> {
+        if self.shared_content.is_some() {
+            return Err(DocTreeError::Unsupported(
+                "shared content uses the kernel tree",
+            ));
+        }
         let mut build = Build {
             plan,
             sites,

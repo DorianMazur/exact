@@ -89,6 +89,19 @@ fn node_row(plan: &exact_plan::Plan, id: StyleId) -> (NodeType, exact_plan::Bind
 }
 
 #[test]
+fn shared_content_requires_a_host_that_can_move_its_children() {
+    let plan = contract::compile(
+        "component App\n  view\n    box sharedContent=\"player\"\n      text \"Playing\"\n",
+    )
+    .unwrap();
+    let error = crate::emit::emit(&plan, false, false).err().unwrap();
+    assert!(
+        error.contains("does not support `sharedContent`"),
+        "{error}"
+    );
+}
+
+#[test]
 fn a_bound_layout_transition_compiles_and_is_followed() {
     let js = crate::emit::emit(&plan(), false, false).unwrap().js;
     assert!(js.contains("\"--exact-layout-transition\""), "{js}");
