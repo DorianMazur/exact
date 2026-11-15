@@ -555,6 +555,7 @@ extension NavigationHost {
         }
         // A search settles once the columns stop: one left open over a fold whose results a Back took closes then
         settleSearches()
+        searchOpenChanged()
     }
 
     /// The sheet an expanded split shows as its inspector (`navigationInspector`,

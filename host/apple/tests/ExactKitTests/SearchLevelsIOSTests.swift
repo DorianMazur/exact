@@ -254,6 +254,44 @@ final class SearchLevelsIOSTests: XCTestCase {
         XCTAssertLessThan(edges.bottom, keys, "the keys gone, its cover is the window's safe area again")
     }
 
+    /// Expanded, the results' system Back stays hidden for as long as the search is open, the keys put away too, as
+    /// UIKit hides it while the field floats over them; it shows as the search closes. The sidebar's rows follow its bar
+    /// back on a spring (LLP 1127.000 §1 item 9).
+    func testExpandedTheResultsBackShowsOnlyOnceTheSearchCloses() throws {
+        guard UIApplication.shared.connectedScenes.first is UIWindowScene else { throw missing("scene", "UIKit presents a search in a transition only in a window a scene holds") }
+        let (session, split) = try boot(size: CGSize(width: 1100, height: 800), regular: true)
+        let navigation = session.presenter.navigation, agent = Agent(session: session)
+        until("expanded") { !split.controller.isCollapsed && !agent.nativeInFlight() }
+        XCTAssertNil(agent.tap(["id": Int(try node(session, "row-a").id)])["error"])
+        until("the book shows") { has(session, "book-a") && split.detail.viewControllers.count == 1 && !agent.nativeInFlight() }
+        let (_, search) = try listSearch(split)
+        session.presenter.focusElement(["levels-search"])
+        until("the results are pushed over the book") { split.detail.viewControllers.count == 2 && !agent.nativeInFlight() }
+        until("the search is open") { opened(search) }
+        let results = try XCTUnwrap(split.detail.topViewController as? RouteController)
+        XCTAssertEqual(results.key, routeKey(session, "results"))
+        XCTAssertTrue(results.navigationItem.hidesBackButton, "hidden while the field edits")
+        search.controller.searchBar.searchTextField.insertText("x")
+        until("the app hears the text") { (try? node(session, "search"))?.props["value"] == "x" }
+        XCTAssertTrue(search.controller.searchBar.searchTextField.resignFirstResponder())
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+        XCTAssertTrue(search.controller.isActive, "the search stays open with the keys put away")
+        XCTAssertTrue(results.navigationItem.hidesBackButton, "and its results keep their Back hidden")
+        let sidebar = try XCTUnwrap((session.presenter.groupedLists as? GroupedListHost)?.lists[try node(session, "books").id]?.collection as? GroupedCollectionView)
+        XCTAssertTrue(sidebar.followsBar, "the list is UIKit's sidebar")
+        var sprang = false
+        search.controller.isActive = false
+        until("the search closes") {
+            sprang = sprang || sidebar.layer.animation(forKey: "exact.followsBar") != nil
+            return !search.controller.isActive && search.controller.transitionCoordinator == nil && !agent.nativeInFlight()
+        }
+        XCTAssertTrue(sprang, "the rows follow the bar back on a spring")
+        if let shown = split.detail.topViewController as? RouteController, shown.pushed, split.detail.viewControllers.count > 1 {
+            XCTAssertFalse(shown.navigationItem.hidesBackButton, "Back shows once the search is closed")
+        }
+        XCTAssertFalse(navigation.searchHidesBack(results), "no search keeps it hidden")
+    }
+
     /// Expanded, two pages under results typed over them: collapsed and expanded again, both pages are back under the
     /// results, in order (LLP 1127.000 D8).
     func testACollapseAndExpansionUnderTheResultsKeepEveryPageUnderThem() throws {

@@ -55,6 +55,26 @@ extension NavigationHost {
         return resultsRoute(of: field, in: [top]) === top
     }
 
+    /// Whether the system's Back on `route` stays hidden for the search beside it (LLP 1127.000 §1 item 9): on an
+    /// expanded split, UIKit hides the detail's bar items while the list's search field floats over the keys and shows
+    /// them again once it rests at the sidebar's foot (the keys put away, a fold), the search still open. The results
+    /// route keeps its Back hidden for as long as the search is open, so it shows as the search closes, whatever the
+    /// keys did meanwhile. A swipe back still begins.
+    func searchHidesBack(_ route: RouteController) -> Bool {
+        guard let split, !split.controller.isCollapsed, let list = split.list.viewControllers.first as? RouteController, list !== route,
+              let search = list.search,
+              resultsRoute(of: search.field, in: [route]) === route else { return false }
+        return search.presenting || (search.controller.isActive && !search.dismissing)
+    }
+
+    /// The search beside the detail opened or closed: its results route's Back follows (`searchHidesBack`).
+    func searchOpenChanged() {
+        for case let route as RouteController in split?.detail.viewControllers ?? [] {
+            let hides = route.hidesBack || searchHidesBack(route)
+            if route.navigationItem.hidesBackButton != hides { route.navigationItem.setHidesBackButton(hides, animated: route.view.window != nil) }
+        }
+    }
+
     /// Settles every header search after the stacks changed (`HeaderSearch.settle`): one whose results a Back or a
     /// page took away closes, keeping its text.
     func settleSearches() {

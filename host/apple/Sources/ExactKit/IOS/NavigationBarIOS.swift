@@ -163,6 +163,7 @@ final class HeaderSearch: NSObject, UISearchBarDelegate, UISearchControllerDeleg
         acceptingDismissal = false
         presenting = true
         presentation &+= 1
+        host?.searchOpenChanged()
     }
     func didPresentSearchController(_ search: UISearchController) {
         #if os(iOS)
@@ -237,6 +238,7 @@ final class HeaderSearch: NSObject, UISearchBarDelegate, UISearchControllerDeleg
     }
     func didDismissSearchController(_ search: UISearchController) {
         dismissing = false
+        defer { host?.searchOpenChanged() }
         let accepts = acceptingDismissal
         acceptingDismissal = false
         closingItself = false
@@ -764,7 +766,8 @@ extension NavigationHost {
                 self.restAtTop(sv, in: c)
             }
         }
-        item.hidesBackButton = shape?.authoredBack == true || (c.pushed && !canGoBack) // Keep UIKit's Back on split roots
+        c.hidesBack = shape?.authoredBack == true || (c.pushed && !canGoBack) // Keep UIKit's Back on split roots
+        item.hidesBackButton = c.hidesBack || searchHidesBack(c)
         item.leftItemsSupplementBackButton = true
         #endif
         c.barPresses = []

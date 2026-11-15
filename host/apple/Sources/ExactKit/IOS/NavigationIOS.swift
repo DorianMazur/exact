@@ -27,6 +27,9 @@ final class RouteController: UIViewController, UIScrollViewDelegate {
     /// as the stack's routes are prepared, before UIKit shows any of them
     /// (`NavigationRules.bar`).
     var pushed = false
+    /// Whether the route's own bar hides the system's Back (an authored Back, nothing to go back to); an open search
+    /// beside it can hide it too (`NavigationHost.searchHidesBack`).
+    var hidesBack = false
     weak var lifted: NodeView?
     var barNodes: [NodeView] = []
     /// The filter tablist the search bar shows as its scope bar (LLP 1134).
