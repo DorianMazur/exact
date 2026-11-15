@@ -254,6 +254,34 @@ final class SearchLevelsIOSTests: XCTestCase {
         XCTAssertLessThan(edges.bottom, keys, "the keys gone, its cover is the window's safe area again")
     }
 
+    /// Expanded, two pages under results typed over them: collapsed and expanded again, both pages are back under the
+    /// results, in order (LLP 1127.000 D8).
+    func testACollapseAndExpansionUnderTheResultsKeepEveryPageUnderThem() throws {
+        guard UIApplication.shared.connectedScenes.first is UIWindowScene else { throw missing("scene", "UIKit presents a search in a transition only in a window a scene holds") }
+        let (session, split) = try boot(size: CGSize(width: 1100, height: 800), regular: true)
+        let navigation = session.presenter.navigation, agent = Agent(session: session)
+        until("expanded") { !split.controller.isCollapsed && !agent.nativeInFlight() }
+        XCTAssertNil(agent.tap(["id": Int(try node(session, "row-a").id)])["error"])
+        until("the first book shows") { has(session, "book-a") && split.detail.viewControllers.count == 1 && !agent.nativeInFlight() }
+        XCTAssertTrue(session.navigate("/book/b"))
+        until("the second book is over it") { has(session, "book-b") && split.detail.viewControllers.count == 2 && !agent.nativeInFlight() }
+        let (_, search) = try listSearch(split)
+        session.presenter.focusElement(["levels-search"])
+        until("the results are pushed over the books") { split.detail.viewControllers.count == 3 && !agent.nativeInFlight() }
+        until("the search is open") { opened(search) }
+        search.controller.searchBar.searchTextField.insertText("x")
+        until("the app hears the text") { (try? node(session, "search"))?.props["value"] == "x" }
+        until("UIKit shows the router's stack") { navigation.shownKeys.last == navigation.selectedKey && !agent.nativeInFlight() }
+        collapse()
+        until("collapsed with the results drawn in the list") { split.controller.isCollapsed && navigation.resultsInPlace != nil && !agent.nativeInFlight() }
+        expand()
+        let detail = { split.detail.viewControllers.map { ($0 as? RouteController)?.key } }
+        until("both books are back under the results") {
+            !split.controller.isCollapsed && !agent.nativeInFlight()
+                && detail() == [routeKey(session, "book-a"), routeKey(session, "book-b"), routeKey(session, "results")]
+        }
+    }
+
     /// The search field UIKit floats on the keys as it edits (iOS 26: in a bar of its own, out of every navigation bar)
     /// covers what lies under that bar as the keys do: the bar is the edge scroller's bottom inset, while the route's
     /// cover stays the keys, which UIKit places the bar above (LLP 1127.000 D9).
