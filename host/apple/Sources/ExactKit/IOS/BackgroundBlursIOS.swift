@@ -67,6 +67,12 @@ final class ExtensionBlurs {
 
     private static let queue = DispatchQueue(label: "exact.background-extension-blurs", qos: .userInitiated)
 
+    /// Makes the blurs' context on their queue once an image that extends its background mounts, before its picture
+    /// arrives: made on the main thread for the launch's first picture, it took 9 to 11 ms there on the iPhone Duo
+    /// simulator.
+    static func warm() { _ = warming }
+    private static let warming: Void = queue.async { _ = context }
+
     /// Blurs the pixels' encoded values, as UIKit's blur does: blurred in linear light, a detailed picture's mirror came
     /// out lighter than the picture. A context is safe to share across threads.
     private static let context = CIContext(options: [.cacheIntermediates: false, .workingColorSpace: NSNull(), .outputColorSpace: NSNull()])

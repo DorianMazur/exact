@@ -32,9 +32,10 @@ extension NodeView {
     /// rather than growing from nothing or jumping to its end.
     func syncBackgroundExtension() {
         let held = Self.extensions.object(forKey: self)
+        guard #available(iOS 26.0, tvOS 26.0, *), kind == "image", extendsBackground else { return removeBackgroundExtension() }
+        ExtensionBlurs.warm()
         // A flight shows the whole image on its own layer (LLP 1013.000 D4).
-        guard #available(iOS 26.0, tvOS 26.0, *), kind == "image", extendsBackground, !cssVisibilityHidden,
-              flightLook == nil, window != nil, let image = raster?.image else { return removeBackgroundExtension() }
+        guard !cssVisibilityHidden, flightLook == nil, window != nil, let image = raster?.image else { return removeBackgroundExtension() }
         if let route = ViewPresentation.controller(for: self) as? RouteController, route.safeAreaNeedsLayout { return }
         let kept = (held as? ExtensionView).flatMap { $0.laidOut == boxLayout ? $0.sides : nil } ?? []
         guard let (frame, sides) = extensionFrame(keeping: kept) else {
