@@ -568,7 +568,7 @@ extension NavigationHost {
     /// `publish` records the controller where Exact keeps it before the
     /// hatch runs, which may ask for it again (`HeldStackIOS`'s `realize`).
     func makeNavigation(first: NodeView?, publish: (UINavigationController) -> Void = { _ in }) -> UINavigationController {
-        let nav = UINavigationController()
+        let nav = ExactNavigationController()
         stackCount += 1
         let stack = NavigationStack(showsBar: true, order: stackCount)
         stack.proxy.host = self
