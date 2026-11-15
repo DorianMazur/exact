@@ -719,7 +719,7 @@ final class GroupedListView: NSObject, UICollectionViewDelegate {
         let beside = host.presenter.showsAsSidebar(owner), flipped = beside != sidebar
         let column = host.presenter.onColumnGround(owner)
         let restyled = next.style != previous.style || rethemed || writes != writesGround || flipped || column != onColumn
-        sidebar = beside; onColumn = column
+        sidebar = beside; onColumn = column; (collection as? GroupedCollectionView)?.followsBar = beside
         writesGround = writes
         model = next; followDirection()
         rows = Dictionary(next.sections.flatMap { $0.rows }.map { ($0.view, $0) }, uniquingKeysWith: { a, _ in a })
@@ -1454,32 +1454,6 @@ final class GroupedListView: NSObject, UICollectionViewDelegate {
         if let cell = cell as? GroupedCell, !unavailable, !cell.markedNotEnabled { return }
         if unavailable { cell.accessibilityTraits.insert(.notEnabled) } else { cell.accessibilityTraits.remove(.notEnabled) }
         (cell as? GroupedCell)?.markedNotEnabled = unavailable
-    }
-}
-
-/// A grouped list's collection view, by type, for the agent's wheel.
-final class GroupedCollectionView: UICollectionView, GroupedScroller {
-    /// Animate UIKit's offset changes only when the last frame showed the list (`Presenter.moveOrPlace`).
-    override var bounds: CGRect {
-        get { super.bounds }
-        set {
-            guard UIView.inheritedAnimationDuration > 0, let node = superview as? NodeView, let presenter = node.presenter else { return super.bounds = newValue }
-            presenter.moveOrPlace(node) { super.bounds = newValue }
-        }
-    }
-    /// Inset cards from the window's side safe area or a fold's half band (`sideReach`, LLP 1123).
-    var sideSafeArea: (left: CGFloat, right: CGFloat) = (0, 0) {
-        didSet {
-            guard sideSafeArea != oldValue else { return }
-            safeAreaInsetsDidChange()
-            collectionViewLayout.invalidateLayout()
-        }
-    }
-    override var safeAreaInsets: UIEdgeInsets {
-        var insets = super.safeAreaInsets
-        insets.left = max(insets.left, sideSafeArea.left)
-        insets.right = max(insets.right, sideSafeArea.right)
-        return insets
     }
 }
 
