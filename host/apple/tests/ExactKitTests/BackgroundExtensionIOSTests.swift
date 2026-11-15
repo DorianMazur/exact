@@ -201,9 +201,38 @@ final class BackgroundExtensionIOSTests: XCTestCase {
         let deadline = Date(timeIntervalSinceNow: 10)
         while AnimatedRasters.shared.frame(for: image) == nil, Date() < deadline { RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 0.05)) }
         XCTAssertNotNil(AnimatedRasters.shared.frame(for: image), "the second frame shows")
-        let at = try pixels()
+        var at = try pixels()
         XCTAssertEqual(at(CGPoint(x: 150, y: 100)), [0, 0, 255], "the image's second frame")
+        // The mirror's blurred levels follow once the frame's blurs, made off the main thread, land
+        let landed = Date(timeIntervalSinceNow: 2)
+        while at(CGPoint(x: 150, y: 25)) != [0, 0, 255], Date() < landed {
+            RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 0.02))
+            at = try pixels()
+        }
         XCTAssertEqual(at(CGPoint(x: 150, y: 25)), [0, 0, 255], "its extension's")
+    }
+
+    /// A picture shown at another size (a header's, pulled past its scroller's top) keeps drawing its blurs, scaled
+    /// with it, while those for its new size are made off the main thread; the extension made when the image comes
+    /// back to the window draws the blurs already made.
+    func testTheExtensionKeepsItsBlursAcrossASizeAndTheWindow() throws {
+        let (p, route, image) = try mount(CGRect(x: 0, y: 50, width: 300, height: 100), insets: UIEdgeInsets(top: 50, left: 0, bottom: 0, right: 0))
+        let blurs = try XCTUnwrap((extensions(route).first as? ExtensionView)?.blurs)
+        let first = try XCTUnwrap(blurs.made)
+        p.apply(wireBatch([["op": "frame", "id": 2, "x": 0, "y": 50, "w": 150, "h": 100]]))
+        image.syncBackgroundExtension()
+        XCTAssertTrue(blurs.made?.images.elementsEqual(first.images, by: ===) ?? false, "the picture drawn half as wide keeps its blurs at once")
+        let deadline = Date(timeIntervalSinceNow: 2)
+        while blurs.made?.images.elementsEqual(first.images, by: ===) ?? true, Date() < deadline { RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 0.02)) }
+        let resized = try XCTUnwrap(blurs.made)
+        XCTAssertTrue(zip(resized.sigmas, first.sigmas).allSatisfy { abs($0 - 2 * $1) < 0.01 }, "then draws those made for its size: \(resized.sigmas), from \(first.sigmas)")
+        let page = try XCTUnwrap(p.views[1])
+        page.removeFromSuperview()
+        XCTAssertTrue(extensions(route).isEmpty, "out of the window, the extension goes")
+        route.view.addSubview(page)
+        image.syncBackgroundExtension()
+        let back = try XCTUnwrap(extensions(route).first as? ExtensionView)
+        XCTAssertTrue(back.blurs.made?.images.elementsEqual(resized.images, by: ===) ?? false, "back in it, a new extension draws the blurs made")
     }
 
     /// A column's animation moves the image's box, and each mirror meets the box's edge at every frame of it, as one

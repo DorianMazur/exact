@@ -53,6 +53,8 @@ final class NodeAside {
     var content = CGSize.zero
     var image: UIImage?
     var raster: NativeRasterLease?
+    /// The load (`loadGeneration`) whose lease `raster` is: another decode of the same picture keeps it
+    var rasterLoad = 0
     var imageLayer: CALayer?
     var imageSource: String?
     var loadGeneration = 0
@@ -258,9 +260,11 @@ extension NodeView {
         set {
             if newValue != nil || aside != nil { asideMade.raster = newValue }
             if newValue == nil, let l = imageLayer { l.removeFromSuperlayer(); imageLayer = nil }
+            if newValue == nil { dropExtensionBlurs() }
             if isNativeButton { presenter?.controls.refreshRaster(self) }
         }
     }
+    var rasterLoad: Int { get { aside?.rasterLoad ?? 0 } set { if newValue != 0 || aside != nil { asideMade.rasterLoad = newValue } } }
     /// An image's pixels as a sublayer's contents (`applyImageLayer`).
     var imageLayer: CALayer? { get { aside?.imageLayer } set { if newValue != nil || aside != nil { asideMade.imageLayer = newValue } } }
     var imageSource: String? { get { aside?.imageSource } set { if newValue != nil || aside != nil { asideMade.imageSource = newValue } } }
