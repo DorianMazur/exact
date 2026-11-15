@@ -72,10 +72,11 @@ final class ExtensionView: UIView {
     private static let levels: [(sigma: CGFloat, full: CGFloat)] = [(1, 8), (2.5, 18), (6, 42), (15, 100)]
     fileprivate static let sharp: CGFloat = 2
     /// The box at `shown` in this view, its content box `inner` and the picture at `drawn` in it, with `pixels` from
-    /// `load` (the image's load that gave them, `NodeView.rasterLoad`), a `tint` through their alpha, and `corners`
+    /// `load` (the image's load that gave them, `NodeView.rasterLoad`, nil for an animated image's frame), a `tint`
+    /// through their alpha, and `corners`
     /// the box's clip; a mirror on each side of `shown` short of this view's edges, reaching them. Called inside the
     /// animation that moves the image, each layer takes it.
-    func place(_ shown: CGRect, inner: CGRect, drawn: CGRect, pixels: CGImage, load: Int, tint: CGColor?, corners: CGPath?) {
+    func place(_ shown: CGRect, inner: CGRect, drawn: CGRect, pixels: CGImage, load: Int?, tint: CGColor?, corners: CGPath?) {
         content.frame = shown
         corner(content.layer, corners, shown.size)
         box.frame = inner

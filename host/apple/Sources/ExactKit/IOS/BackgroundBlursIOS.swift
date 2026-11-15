@@ -6,22 +6,23 @@
 // scroller's top, which stretches a header's picture) or decoded again at
 // another resolution keeps drawing the blurs made for it, scaled with it,
 // while those for its new size are made off the main thread: made on it, they
-// took 6 to 8 ms of a frame each time a pull passed the tolerance. Only a
-// picture with no blurs yet, or a different picture, is blurred at once, so a
-// mirror is never drawn unblurred or from another picture.
+// took 6 to 8 ms of a frame each time a pull passed the tolerance. A picture
+// with no blurs yet, a different picture or an animated image's next frame is
+// blurred at once, so a mirror is never drawn unblurred or from other pixels.
 #if os(iOS) || os(tvOS)
 import CoreImage
 import UIKit
 
 final class ExtensionBlurs {
     /// Blurs made of `source`, from `load` (the image's load that gave it, `NodeView.rasterLoad`: another decode of the
-    /// same picture keeps it), each by its sigma in the source's pixels
+    /// same picture keeps it; nil for an animated image's frame, which nothing else stands in for), each by its sigma in
+    /// the source's pixels
     struct Made {
-        let source: CGImage, load: Int, sigmas: [CGFloat], images: [CGImage]
+        let source: CGImage, load: Int?, sigmas: [CGFloat], images: [CGImage]
     }
     private(set) var made: Made?
     /// What the extension last asked for, which blurs made off the main thread are checked against as they land
-    private var wanted: (source: CGImage, load: Int, sigmas: [CGFloat])?
+    private var wanted: (source: CGImage, load: Int?, sigmas: [CGFloat])?
     /// Blurs are being made off the main thread: one at a time, the latest `wanted` made when they land
     private var making = false
     /// Shows blurs made off the main thread (`ExtensionView`)
@@ -30,10 +31,10 @@ final class ExtensionBlurs {
     /// Asks for the blurs of `source` by `sigmas`. Those made stand while their source is the same and each sigma is
     /// within a quarter of the one asked for; those of the same picture stand while new ones are made off the main
     /// thread (`landed`); else they are made at once.
-    func want(_ source: CGImage, load: Int, sigmas: [CGFloat]) {
+    func want(_ source: CGImage, load: Int?, sigmas: [CGFloat]) {
         wanted = (source, load, sigmas)
         if let made, Self.serves(made, source, sigmas) { return }
-        if let made, made.load == load { return makeLatest() }
+        if let made, let load, made.load == load { return makeLatest() }
         made = Made(source: source, load: load, sigmas: sigmas, images: Self.blurs(source, sigmas))
     }
 
@@ -41,6 +42,8 @@ final class ExtensionBlurs {
         guard !making, let job = wanted else { return }
         making = true
         Self.queue.async { [weak self] in
+            // Nothing for an image gone meanwhile (destroyed, or its picture let go)
+            guard self != nil else { return }
             let images = Self.blurs(job.source, job.sigmas)
             DispatchQueue.main.async {
                 guard let self else { return }
@@ -67,9 +70,9 @@ final class ExtensionBlurs {
 
     private static let queue = DispatchQueue(label: "exact.background-extension-blurs", qos: .userInitiated)
 
-    /// Makes the blurs' context on their queue once an image that extends its background mounts, before its picture
-    /// arrives: made on the main thread for the launch's first picture, it took 9 to 11 ms there on the iPhone Duo
-    /// simulator.
+    /// Starts making the blurs' context on their queue once an image that extends its background mounts, before its
+    /// picture arrives: made on the main thread for the launch's first picture, it took 9 to 11 ms there on the iPhone
+    /// Duo simulator.
     static func warm() { _ = warming }
     private static let warming: Void = queue.async { _ = context }
 

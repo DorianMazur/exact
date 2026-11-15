@@ -201,14 +201,8 @@ final class BackgroundExtensionIOSTests: XCTestCase {
         let deadline = Date(timeIntervalSinceNow: 10)
         while AnimatedRasters.shared.frame(for: image) == nil, Date() < deadline { RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 0.05)) }
         XCTAssertNotNil(AnimatedRasters.shared.frame(for: image), "the second frame shows")
-        var at = try pixels()
+        let at = try pixels()
         XCTAssertEqual(at(CGPoint(x: 150, y: 100)), [0, 0, 255], "the image's second frame")
-        // The mirror's blurred levels follow once the frame's blurs, made off the main thread, land
-        let landed = Date(timeIntervalSinceNow: 2)
-        while at(CGPoint(x: 150, y: 25)) != [0, 0, 255], Date() < landed {
-            RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 0.02))
-            at = try pixels()
-        }
         XCTAssertEqual(at(CGPoint(x: 150, y: 25)), [0, 0, 255], "its extension's")
     }
 
@@ -233,6 +227,23 @@ final class BackgroundExtensionIOSTests: XCTestCase {
         image.syncBackgroundExtension()
         let back = try XCTUnwrap(extensions(route).first as? ExtensionView)
         XCTAssertTrue(back.blurs.made?.images.elementsEqual(resized.images, by: ===) ?? false, "back in it, a new extension draws the blurs made")
+    }
+
+    /// When an image's picture is replaced, its blurs stay while its extension shows, which draws them until those of
+    /// the new pixels land, and go when it shows none: they are not kept for pixels it no longer holds.
+    func testAReplacedPictureKeepsItsBlursOnlyWhileItsExtensionShows() throws {
+        let (p, route, image) = try mount(CGRect(x: 0, y: 50, width: 300, height: 100), insets: UIEdgeInsets(top: 50, left: 0, bottom: 0, right: 0))
+        let blurs = try XCTUnwrap((extensions(route).first as? ExtensionView)?.blurs)
+        image.extensionRasterReplaced()
+        image.syncBackgroundExtension()
+        XCTAssertTrue((extensions(route).first as? ExtensionView)?.blurs === blurs, "shown, the extension keeps drawing its blurs")
+        p.apply(wireBatch([["op": "frame", "id": 2, "x": 0, "y": 80, "w": 300, "h": 100]]))
+        image.syncBackgroundExtension()
+        XCTAssertTrue(extensions(route).isEmpty, "short of the safe area, the image has no extension")
+        image.extensionRasterReplaced()
+        p.apply(wireBatch([["op": "frame", "id": 2, "x": 0, "y": 50, "w": 300, "h": 100]]))
+        image.syncBackgroundExtension()
+        XCTAssertFalse((extensions(route).first as? ExtensionView)?.blurs === blurs, "replaced with none shown, the blurs went")
     }
 
     /// A column's animation moves the image's box, and each mirror meets the box's edge at every frame of it, as one

@@ -32,7 +32,10 @@ extension NodeView {
     /// rather than growing from nothing or jumping to its end.
     func syncBackgroundExtension() {
         let held = Self.extensions.object(forKey: self)
-        guard #available(iOS 26.0, tvOS 26.0, *), kind == "image", extendsBackground else { return removeBackgroundExtension() }
+        guard #available(iOS 26.0, tvOS 26.0, *), kind == "image", extendsBackground else {
+            removeBackgroundExtension()
+            return dropExtensionBlurs()
+        }
         ExtensionBlurs.warm()
         // A flight shows the whole image on its own layer (LLP 1013.000 D4).
         guard !cssVisibilityHidden, flightLook == nil, window != nil, let image = raster?.image else { return removeBackgroundExtension() }
@@ -74,7 +77,8 @@ extension NodeView {
         let inner = contentBox(), fit = style["object_fit"]?.string ?? "fill"
         let drawn = RasterGeometry.rect(natural: image.naturalSize, content: inner, fit: fit).offsetBy(dx: -inner.minX, dy: -inner.minY)
         let corners = cornerRadii(in: bounds).contains { $0 > 0 } ? roundedPath(in: CGRect(origin: .zero, size: bounds.size)).cgPath : nil
-        view.place(shown, inner: inner, drawn: drawn, pixels: AnimatedRasters.shared.frame(for: self) ?? image.image, load: rasterLoad,
+        let frame = AnimatedRasters.shared.frame(for: self)
+        view.place(shown, inner: inner, drawn: drawn, pixels: frame ?? image.image, load: frame == nil ? rasterLoad : nil,
                    tint: channels("tint_color").map { TextEngine.color($0).cgColor }, corners: corners)
     }
 
@@ -88,9 +92,15 @@ extension NodeView {
         imageLayer?.isHidden = false
     }
 
-    /// The image let its picture go (destroyed or parked): its blurs go with it.
+    /// The image let its picture go (destroyed or parked), or stopped extending its background: its blurs go with it.
     func dropExtensionBlurs() {
         Self.blurs.removeObject(forKey: self)
+    }
+
+    /// The image's picture was replaced: the blurs of the last one go, unless its extension shows, which draws them
+    /// until those of the new pixels land (`ExtensionBlurs`).
+    func extensionRasterReplaced() {
+        if Self.extensions.object(forKey: self) == nil { dropExtensionBlurs() }
     }
 
     /// The extension's frame in the image's coordinates, and the sides it

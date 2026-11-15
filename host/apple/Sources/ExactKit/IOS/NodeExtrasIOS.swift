@@ -258,9 +258,10 @@ extension NodeView {
     var raster: NativeRasterLease? {
         get { aside?.raster }
         set {
+            let replaced = newValue != nil && aside?.raster != nil && newValue !== aside?.raster
             if newValue != nil || aside != nil { asideMade.raster = newValue }
             if newValue == nil, let l = imageLayer { l.removeFromSuperlayer(); imageLayer = nil }
-            if newValue == nil { dropExtensionBlurs() }
+            if newValue == nil { dropExtensionBlurs() } else if replaced { extensionRasterReplaced() }
             if isNativeButton { presenter?.controls.refreshRaster(self) }
         }
     }
